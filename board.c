@@ -166,7 +166,7 @@ bool isInBounds(r, c) {
 void displayBoard(char[][] board) {
 	for(int r = 0; r < BOARD_HEIGHT; r++) {
 		for(int c = 0; c < BOARD_WIDTH; c++) {
-			printf("%c", )
+			printf("%c", asdf);
 		}
 	}
 }
