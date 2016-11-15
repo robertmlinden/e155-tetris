@@ -1,32 +1,32 @@
-module keypad(input  logic		clk, reset,
-			  input  logic [3:0]	rows,
-			  output logic [3:0]	cols,
-			  output logic [3:0]	dataout);
+module keypadModule	(input  logic		   clk, reset,
+							 input  logic [3:0]	rows,
+							 output logic [3:0]	cols,
+							 output logic [3:0]	dataout);
 
-	logic		slowclk;
-	logic [3:0]	d0, d1;
+	logic			slowclk;
+	logic [3:0]	d0;
 
-	clkdiv		clkdiv(clk, reset, slowclk);
-	keypad		keypad(slowclk, reset, rows, cols, d0, d1);
-	display		display(slowclk, reset, d0, dataout);
+	clkdiv_1		clkdiv_instance_1 (clk, reset, slowclk);
+	keypad_1		keypad_instance_1 (slowclk, reset, rows, cols, d0);
+	display_1	display_instance_1 (slowclk, reset, d0, dataout);
 	
 endmodule
 
-module keypad(input	logic			slowclk, reset,
-			  input logic [3:0]		rows,
-			  output logic [3:0]	cols, d0);
+module keypad_1(input	logic				slowclk, reset,
+				    input 	logic [3:0]		rows,
+			       output  logic [3:0]		cols, d0);
 
-	logic		state;
+	logic			state;
 	logic [3:0] key;
 
 	always_ff@(posedge slowclk or posedge reset)
 		if (reset) begin
 			state <= 0;
-			cols <= 4b'0111;
+			cols <= 4'b0111;
 			d0 <= 4'b0000;
 		end else if (&rows) begin
 			state <= 0;
-			cols <= (cols[0], cols[3:1]);
+			cols <= {cols[0], cols[3:1]};
 		end else if (~state) begin
 			state <= 1;
 			d0 <= key;
@@ -55,7 +55,7 @@ module keypad(input	logic			slowclk, reset,
 
 endmodule
 
-module clkdiv(input  logic clk, reset,
+module clkdiv_1(input  logic clk, reset,
 			  output logic slowclk);
 
 		logic [16:0] count;
@@ -67,8 +67,8 @@ module clkdiv(input  logic clk, reset,
 
 endmodule
 
-module decoder (input	logic [3:0] a,
-				output	logic [3:0] y);
+module decoder_1 (input		logic [3:0] a,
+						output	logic [3:0] y);
 
 	always_comb
 		case(a)
@@ -82,22 +82,21 @@ module decoder (input	logic [3:0] a,
 			7:	y = 4'b0100;
 			8:	y = 4'b0010;
 			9:	y = 4'b0001;
-			10:	y = 4'b0000;
-			11:	y = 4'b0000;
-			12:	y = 4'b0000;
-			13:	y = 4'b0000;
-			14:	y = 4'b0000;
-			15:	y = 4'b0000;
+			10: y = 4'b0000;
+			11: y = 4'b0000;
+			12: y = 4'b0000;
+			13: y = 4'b0000;
+			14: y = 4'b0000;
+			15: y = 4'b0000;
 
 		endcase
 endmodule
 
-module display(slowclk, reset, d0, dataout);
+module display_1(slowclk, reset, d0, dataout);
 	input			slowclk;
 	input			reset;
 	input [3:0]		d0;
 	output [3:0]	dataout;
 
-	decoder decoder(d0, dataout);
-
+	decoder_1 decoder_instance_1(d0, dataout);
 endmodule
