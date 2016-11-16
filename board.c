@@ -4,11 +4,6 @@
 int BOARD_WIDTH = 12;
 int BOARD_HEIGHT = 22;
 
-enum Direction {
-	LEFT,
-	RIGHT
-}
-
 enum PieceShape {
 	S,
 	Z,
@@ -27,7 +22,7 @@ typedef int bool;
 // row number corresponds to first entry corresponds to y-value
 // col number corresponds to second entry corresponds to x-value
 // Therefore, board is indexed (y, x)
-char board[BOARD_WIDTH][BOARD_HEIGHT];
+// char board[BOARD_WIDTH][BOARD_HEIGHT];
 
 typedef struct {
 	PieceShape pieceShape;
@@ -63,7 +58,9 @@ void initBoard(char[][] board) {
 }
 
 // Niavely stops a piece when it makes contact with one below
-void tick(FallingPiece* fallingPiece, char[][] board) {
+// Returns true if the user can keep PLAYING
+// Returns false if the user lost
+bool tick(FallingPiece* fallingPiece, char[][] board) {
 	fallingPiece -> r = (FallingPiece -> r) + 1;
 
 	for(int r = 0; r < PIECE_BLOCK_SIZE; r++) {
@@ -71,17 +68,21 @@ void tick(FallingPiece* fallingPiece, char[][] board) {
 			int boardRAfterTick = r + fallingPiece->r;
 			int boardCAfterTick = c + fallingPiece->c;
 			if(piece[r][c] != ' ' && board[boardRAfterTick + 1][boardCAfterTick] != ' ') {
-				// The piece needs to stop faling here, so transition to new falling piece
-				solidifyFallingPiece(fallingPiece, board);
+				// The piece needs to stop falling here, so transition to new falling piece
+				bool continueGame = solidifyFallingPiece(fallingPiece, board);
+				if(!continueGame) {
+					return false;
+				}
 				levelElimination(board);
 				newFallingPiece(fallingPiece);
+				return true;
 			}
 		}
 	}
 }
 
 
-
+// NEED TO ADJUST TO ACCOUNT FOR THE FACT THAT THERE MAY BE PIECES IN THE STARTING SPOT
 void newFallingPiece(FallingPiece* fallingPiece) {
 	// srand SHOULD ONLY BE CALLED ONCE!! MOVE THIS TO A ONE-TIME PLACE!!!
 	srand(time(NULL));
@@ -94,16 +95,20 @@ void newFallingPiece(FallingPiece* fallingPiece) {
 	fallingPiece->c = (BOARD_WIDTH / 2) - 2;
 }
 
-void solidifyFallingPiece(FallingPiece* fallingPiece, char[][] board) {
+bool solidifyFallingPiece(FallingPiece* fallingPiece, char[][] board) {
 	for(int r = 0; r < PIECE_BLOCK_SIZE; r++) {
 		for(int c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardR = r + fallingPiece->r;
 			int boardC = c + fallingPiece->c;
 			if(piece[r][c] != ' ') {
+				if(boardR <= 1) {
+					return false;
+				}
 				board[boardR][boardC] = piece[r][c];
 			}
 		}
 	}
+	return true;
 }
 
 bool move(FallingPiece* fallingPiece, bool moveRight, char[][] baord) {
@@ -164,7 +169,7 @@ bool isInBounds(r, c) {
 	return r <= BOARD_HEIGHT - 2  && c >= 1 && c <= BOARD_HEIGHT - 2;
 }
 
-void displayBoard(char[][] board, FallingPiece* floatingPiece) {
+void displayBoard(FallingPiece* floatingPiece, char[][] board) {
 	fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
 	fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
 	fallingPieceColDisplayBegin = fallingPiece -> c;
