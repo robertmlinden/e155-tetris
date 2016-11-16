@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "tetrislib.h"
 
 /////////////////////////////////////////////////////////////////////
 // Constants
