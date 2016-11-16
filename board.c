@@ -201,13 +201,11 @@ void lineCheck(){
 	for(int r = 1; r < BOARD_HEIGHT-1; r++){
 		int c = 1;
 		while(c < BOARD_WIDTH - 1){
-
 			if (board[r][c] == ' '){
 			break;
 			} else {
 			c++;
 			}
-
 			if (c == BOARD_WIDTH - 1){
 				deleteRow(r)
 				r--;
