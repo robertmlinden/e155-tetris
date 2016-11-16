@@ -5,6 +5,170 @@
 #include "tetrislib.h"
 
 
+char PIECES[NUM_PIECES][NUM_ROTATIONS][PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE] = 
+{
+	{
+	// S
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'S', 'S', ' '},
+		 {'S', 'S', ' ', ' '},
+		 {' ', ' ', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'S', ' ', ' '},
+		 {' ', 'S', 'S', ' '},
+		 {' ', ' ', 'S', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {' ', 'S', 'S', ' '},
+		 {'S', 'S', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {'S', ' ', ' ', ' '},
+		 {'S', 'S', ' ', ' '},
+		 {' ', 'S', ' ', ' '}}
+	},
+	
+	{
+	// Z
+		{{' ', ' ', ' ', ' '},
+		 {'Z', 'Z', ' ', ' '},
+		 {' ', 'Z', 'Z', ' '},
+		 {' ', ' ', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', 'Z', ' '},
+		 {' ', 'Z', 'Z', ' '},
+		 {' ', 'Z', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'Z', 'Z', ' ', ' '},
+		 {' ', 'Z', 'Z', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'Z', ' ', ' '},
+		 {'Z', 'Z', ' ', ' '},
+		 {'Z', ' ', ' ', ' '}}
+	},
+	
+	{
+	// I
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'I', 'I', 'I', 'I'},
+		 {' ', ' ', ' ', ' '}},
+
+		{{' ', 'I', ' ', ' '},
+		 {' ', 'I', ' ', ' '},
+		 {' ', 'I', ' ', ' '},
+		 {' ', 'I', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {'I', 'I', 'I', 'I'},
+		 {' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '}},
+
+		 {{' ', ' ', 'I', ' '},
+		 {' ', ' ', 'I', ' '},
+		 {' ', ' ', 'I', ' '},
+		 {' ', ' ', 'I', ' '}}
+	},
+	
+	{
+	// O
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'O', 'O', ' ', ' '},
+		 {'O', 'O', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'O', 'O', ' ', ' '},
+		 {'O', 'O', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'O', 'O', ' ', ' '},
+		 {'O', 'O', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'O', 'O', ' ', ' '},
+		 {'O', 'O', ' ', ' '}}
+	},
+	
+	{
+	// T
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'T', ' ', ' '},
+		 {'T', 'T', 'T', ' '},
+		 {' ', ' ', ' ', ' '}},	
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'T', ' ', ' '},
+		 {' ', 'T', 'T', ' '},
+		 {' ', 'T', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'T', 'T', 'T', ' '},
+		 {' ', 'T', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'T', ' ', ' '},
+		 {'T', 'T', ' ', ' '},
+		 {' ', 'T', ' ', ' '}}
+	},
+	
+	{
+	// L
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', 'L', ' '},
+		 {'L', 'L', 'L', ' '},
+		 {' ', ' ', ' ', ' '}},	
+	
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'L', ' ', ' '},
+		 {' ', 'L', ' ', ' '},
+		 {' ', 'L', 'L', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'L', 'L', 'L', ' '},
+		 {'L', ' ', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {'L', 'L', ' ', ' '},
+		 {' ', 'L', ' ', ' '},
+		 {' ', 'L', ' ', ' '}}
+	},
+	
+	{
+	// J
+		{{' ', ' ', ' ', ' '},
+		 {'J', ' ', ' ', ' '},
+		 {'J', 'J', 'J', ' '},
+		 {' ', ' ', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'J', 'J', ' '},
+		 {' ', 'J', ' ', ' '},
+		 {' ', 'J', ' ', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', ' ', ' ', ' '},
+		 {'J', 'J', 'J', ' '},
+		 {' ', ' ', 'J', ' '}},
+
+		{{' ', ' ', ' ', ' '},
+		 {' ', 'J', ' ', ' '},
+		 {' ', 'J', ' ', ' '},
+		 {'J', 'J', ' ', ' '}}
+	}
+};
+
 // Rotate
 // Gravity
 // Move
@@ -83,7 +247,7 @@ bool tick(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
 				if(!continueGame) {
 					return false;
 				}
-				// levelElimination(board);
+				lineCheck(board);
 				newFallingPiece(fallingPiece);
 				return true;
 			}
@@ -171,15 +335,18 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIG
 	int r, c;
 	for(r = 0; r < BOARD_HEIGHT; r++) {
 		for(c = 0; c < BOARD_WIDTH; c++) {
-			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-				char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c = fallingPieceColDisplayBegin] :
-														board[r][c];
-				printf("%c");
-			}
-			else {
+			//if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+			//					fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+			//	char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c - fallingPieceColDisplayBegin] :
+			//											board[r][c];
+			//	printf("%c");
+			//}
+			//else {
 				printf("%c", board[r][c]);
+			if(r == 12 && c == 1) {
+				printf("%d!", board[r][c] == '#');
 			}
+		//	}
 		}
 		printf("\n");
 	}
@@ -189,32 +356,34 @@ bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
 }
 
-void lineCheck(){
+void deleteRow(int rDeleted, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
 	int r, c;
-	for(int r = 1; r < BOARD_HEIGHT-1; r++){
+ 	for (r = rDeleted; r > 1; r--)
+	{
+	        for (c = 1; c < BOARD_WIDTH - 1; c++)
+	        {
+	            board[r][c] = board[r-1][c];
+	        }
+    	}   
+}
+
+int lineCheck(char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+	int r;
+	int deleteCount = 0;
+	for(r = 1; r < BOARD_HEIGHT-1; r++){
 		int c = 1;
 		while(c < BOARD_WIDTH - 1){
 			if (board[r][c] == ' '){
-			break;
+				break;
 			} else {
-			c++;
+				c++;
 			}
 			if (c == BOARD_WIDTH - 1){
-				deleteRow(r);
+				deleteRow(r, board);
+				deleteCount++;
 				r--;
 			}
 		}
 	}
-}
-
-
-void deleteRow(int rDeleted) {
-	int r, c;
- 	for (int r = rDeleted; r > 1; r--)
-    {
-        for (int c = 1; c < BOARD_WIDTH - 1; c++)
-        {
-            board[r][c] = board[r-1][c];
-        }
-    }   
+	return deleteCount;
 }

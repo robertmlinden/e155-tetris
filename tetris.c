@@ -122,20 +122,27 @@ void main(void) {
 	// Set pin 26 to output
 	// pinmode(26, OUTPUT);
 
-	FallingPiece* fallingPiece;
+	FallingPiece fallingPiece;
     
-    char board[BOARD_WIDTH][BOARD_HEIGHT];
+	char board[BOARD_WIDTH][BOARD_HEIGHT];
+	
+	initBoard(board);
+	newFallingPiece(&fallingPiece);
+	
+	int tickLengthSeconds = 1;
 
-    initBoard(board);
-    newFallingPiece(fallingPiece);
+	displayBoard(&fallingPiece, board);
 
-    int tickLengthSeconds = 1;
+	while(true) {
+		delaySeconds(tickLengthSeconds);
+		printf("After delay\n");
+		tick(&fallingPiece, board);
+		printf("After tick\n");
+	        displayBoard(&fallingPiece, board);
+		printf("After print\n");
+    	}
 
-    while(true) {
-        delayMicros(tickLengthSeconds);
-        tick(fallingPiece, board);
-        displayBoard(fallingPiece, board);
-    }
+	prinf("DONE\n");
 }
 
 
