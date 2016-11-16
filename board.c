@@ -159,15 +159,35 @@ bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char[][] board) {
 }
 
 // Allow r <= 0 for start placement
+// Can utilize isInSquare() if appropriate
 bool isInBounds(r, c) {
 	return r <= BOARD_HEIGHT - 2  && c >= 1 && c <= BOARD_HEIGHT - 2;
 }
 
-void displayBoard(char[][] board) {
+void displayBoard(char[][] board, FallingPiece* floatingPiece) {
+	fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
+	fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
+	fallingPieceColDisplayBegin = fallingPiece -> c;
+	fallingPieceColDisplayEnd = fallingPiece -> c + 3;
+	
+	char[][] piece = PIECES[fallingPiece->pieceShape][fallingPiece->rotation];
+
 	for(int r = 0; r < BOARD_HEIGHT; r++) {
 		for(int c = 0; c < BOARD_WIDTH; c++) {
-			printf("%c", asdf);
+			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+				char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c = fallingPieceColDisplayBegin] :
+														board[r][c];
+				printf("%c");
+			}
+			else {
+				printf("%c", board[r][c]);
+			}
 		}
+		printf("\n");
 	}
 }
 
+bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
+	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
+}
