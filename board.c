@@ -188,3 +188,33 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIG
 bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
 }
+
+void lineCheck(){
+	int r, c;
+	for(int r = 1; r < BOARD_HEIGHT-1; r++){
+		int c = 1;
+		while(c < BOARD_WIDTH - 1){
+			if (board[r][c] == ' '){
+			break;
+			} else {
+			c++;
+			}
+			if (c == BOARD_WIDTH - 1){
+				deleteRow(r);
+				r--;
+			}
+		}
+	}
+}
+
+
+void deleteRow(int rDeleted) {
+	int r, c;
+ 	for (int r = rDeleted; r > 1; r--)
+    {
+        for (int c = 1; c < BOARD_WIDTH - 1; c++)
+        {
+            board[r][c] = board[r-1][c];
+        }
+    }   
+}
