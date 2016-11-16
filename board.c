@@ -198,6 +198,7 @@ bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 }
 
 void lineCheck(){
+	int r, c;
 	for(int r = 1; r < BOARD_HEIGHT-1; r++){
 		int c = 1;
 		while(c < BOARD_WIDTH - 1){
@@ -207,7 +208,7 @@ void lineCheck(){
 			c++;
 			}
 			if (c == BOARD_WIDTH - 1){
-				deleteRow(r)
+				deleteRow(r);
 				r--;
 			}
 		}
@@ -216,7 +217,8 @@ void lineCheck(){
 
 
 void deleteRow(int rDeleted) {
-    for (int r = rDeleted; r > 1; r--)
+	int r, c;
+ 	for (int r = rDeleted; r > 1; r--)
     {
         for (int c = 1; c < BOARD_WIDTH - 1; c++)
         {
