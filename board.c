@@ -201,9 +201,33 @@ void newFallingPiece(FallingPiece* fallingPiece) {
 	fallingPiece->rotation = 0;
 
 	// DETERMINE EXACT COORDINATES FOR EACH STARTING PIECE
-	// THIS IS JUST A SIMPLE WORKAROUND FOR NOW
-	fallingPiece->r = 0;
-	fallingPiece->c = (BOARD_WIDTH / 2) - 2;
+
+	if (pieceShape == 0) {
+		fallingPiece->r = -1;
+		fallingPiece->c = 5;
+	} else if (pieceShape == 1){
+		fallingPiece->r = -1;
+		fallingPiece->c = 4;
+	} else if (pieceShape == 2){
+		fallingPiece->r = -1;
+		fallingPiece->c = 4;
+	} else if (pieceShape == 3){
+		fallingPiece->r = -2;
+		fallingPiece->c = 5;
+	} else if (pieceShape == 4){
+		fallingPiece->r = -1;
+		fallingPiece->c = 4;
+	} else if (pieceShape == 5){
+		fallingPiece->r = -1;
+		fallingPiece->c = 5;
+	} else if (pieceShape == 6){
+		fallingPiece->r = -1;
+		fallingPiece->c = 4;
+	} else {
+		fallingPiece->r = 0;
+		fallingPiece->c = 6;
+	}
+
 }
 
 bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
