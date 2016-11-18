@@ -29,6 +29,8 @@ typedef struct {
 #define NUM_ROTATIONS 4
 #define PIECE_BLOCK_SIZE 4
 
+#define NEEDED_BONUS_PIECE_POTENTIAL 5
+
 // Miscellaneous ///////////////////////////////////////////////////
 
 typedef int bool;

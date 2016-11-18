@@ -179,7 +179,7 @@ char PIECES[NUM_PIECES][NUM_ROTATIONS][PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE] =
 // floating piece on the bottom?
 // Another button to just lead-drop the piece?
 
-void initBoard(char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+void initBoard(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int r, c;
 	for(r = 0; r < BOARD_HEIGHT; r++) {
 		for(c = 0; c < BOARD_WIDTH; c++) {
@@ -196,7 +196,6 @@ void initBoard(char board[BOARD_WIDTH][BOARD_HEIGHT]) {
 // NEED TO ADJUST TO ACCOUNT FOR THE FACT THAT THERE MAY BE PIECES IN THE STARTING SPOT
 void newFallingPiece(FallingPiece* fallingPiece) {
 	// srand SHOULD ONLY BE CALLED ONCE!! MOVE THIS TO A ONE-TIME PLACE!!!
-	srand(time(NULL));
 	fallingPiece->pieceShape = rand() % NUM_PIECES;    //returns a pseudo-random integer between 0 and RAND_MAX
 	fallingPiece->rotation = 0;
 
@@ -206,7 +205,7 @@ void newFallingPiece(FallingPiece* fallingPiece) {
 	fallingPiece->c = (BOARD_WIDTH / 2) - 2;
 }
 
-bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
 		sizeof(char) * PIECE_BLOCK_SIZE * PIECE_BLOCK_SIZE);
@@ -228,9 +227,9 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BO
 }
 
 // Niavely stops a piece when it makes contact with one below
-// Returns true if the user can keep PLAYING
-// Returns false if the user lost
-bool tick(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+// Returns the number of rows eliminated due to the tick
+// Returns -1 if the user lost
+int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], FallingPiece* bonusPiece, bool* useBonus, bool* hasBonus) {
 	fallingPiece -> r = (fallingPiece -> r) + 1;
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
@@ -245,17 +244,27 @@ bool tick(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
 				// The piece needs to stop falling here, so transition to new falling piece
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
 				if(!continueGame) {
-					return false;
+					return -1;
 				}
-				lineCheck(board);
-				newFallingPiece(fallingPiece);
-				return true;
+				int scoreAddition = lineCheck(board);
+				if(*useBonus && *hasBonus) {
+					*fallingPiece = *bonusPiece;
+					*useBonus = false;
+					*hasBonus = false;
+				}
+				else {
+					*useBonus = false;
+					newFallingPiece(fallingPiece);
+				}
+
+				return scoreAddition;
 			}
 		}
 	}
+	return 0;
 }
 
-bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int h_offset = moveRight ? 1 : -1;
 	
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
@@ -280,7 +289,7 @@ bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_WIDTH][BO
 
 // STILL NEED TO IMPLEMENT ADJUSTING A PIECE IF SIMPLE ROTATION IS INVALID BUT ADDING A 1 OR 2 SQUARE TRANSLATION WOULD IN FACT MAKE IT VALID
 // VERIFY THIS BY PLAYING SOME TETRIS!
-bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	// Temporarily rotate the falling piece to see if then new configuration is valid on the board
 	if(rotateClockwise) {
 		fallingPiece -> rotation = (fallingPiece -> rotation + 1) % 4;
@@ -322,7 +331,7 @@ bool isInBounds(r, c) {
 	return r <= BOARD_HEIGHT - 2  && c >= 1 && c <= BOARD_HEIGHT - 2;
 }
 
-void displayBoard(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
 	int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
 	int fallingPieceColDisplayBegin = fallingPiece -> c;
@@ -335,18 +344,32 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_WIDTH][BOARD_HEIG
 	int r, c;
 	for(r = 0; r < BOARD_HEIGHT; r++) {
 		for(c = 0; c < BOARD_WIDTH; c++) {
-			//if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-			//					fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-			//	char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c - fallingPieceColDisplayBegin] :
-			//											board[r][c];
-			//	printf("%c");
-			//}
-			//else {
-				printf("%c", board[r][c]);
-			if(r == 12 && c == 1) {
-				printf("%d!", board[r][c] == '#');
+			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+				char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c - fallingPieceColDisplayBegin] :
+														board[r][c];
+				printf("%c", printChar);
 			}
-		//	}
+			else {
+				printf("%c", board[r][c]);
+			}
+		}
+		printf("\n");
+	}
+}
+
+void displayBonusPiece(FallingPiece* bonusPiece) {
+	printf("\nBonus Piece\n");
+		
+	char bonusPieceDisplay[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	memcpy(bonusPieceDisplay, PIECES[bonusPiece->pieceShape][bonusPiece->rotation], 
+		sizeof(char) * PIECE_BLOCK_SIZE * PIECE_BLOCK_SIZE);
+
+	// Print bonus piece
+	int r, c;
+	for(r = 0; r < PIECE_BLOCK_SIZE; r++) {
+		for(c =0; c < PIECE_BLOCK_SIZE; c++) {
+			printf("%c", bonusPieceDisplay[r][c]);
 		}
 		printf("\n");
 	}
@@ -356,7 +379,7 @@ bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
 }
 
-void deleteRow(int rDeleted, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+void deleteRow(int rDeleted, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int r, c;
  	for (r = rDeleted; r > 1; r--)
 	{
@@ -367,7 +390,7 @@ void deleteRow(int rDeleted, char board[BOARD_WIDTH][BOARD_HEIGHT]) {
     	}   
 }
 
-int lineCheck(char board[BOARD_WIDTH][BOARD_HEIGHT]) {
+int lineCheck(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int r;
 	int deleteCount = 0;
 	for(r = 1; r < BOARD_HEIGHT-1; r++){

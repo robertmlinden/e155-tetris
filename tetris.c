@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 #include "tetrislib.h"
 
 /////////////////////////////////////////////////////////////////////
@@ -122,7 +123,12 @@ void main(void) {
 	// Set pin 26 to output
 	// pinmode(26, OUTPUT);
 
-	FallingPiece fallingPiece;
+	srand(time(NULL));
+
+	FallingPiece fallingPiece, bonusPiece;
+
+	// A flag indicating that there is a available bonus piece
+	bool hasBonus = false;
     
 	char board[BOARD_WIDTH][BOARD_HEIGHT];
 	
@@ -130,19 +136,66 @@ void main(void) {
 	newFallingPiece(&fallingPiece);
 	
 	int tickLengthSeconds = 1;
+	int score = 0;
+	int bonusPiecePotential = 0;
 
-	displayBoard(&fallingPiece, board);
+	bool gameOver = false;
+	bool useBonus = false;
 
-	while(true) {
-		delaySeconds(tickLengthSeconds);
-		printf("After delay\n");
-		tick(&fallingPiece, board);
-		printf("After tick\n");
+	while(!gameOver) {
+		printf("Enter a one-letter command:\n");
+		printf("\ta: Move Left\n");
+		printf("\td: Move Right\n");
+		printf("\tw: Rotate Clockwise\n");
+		printf("\ts: Rotate Counterclockwise\n");
+		printf("\tb: Use bonus piece (if available) for next piece\n");
+		printf("\tt: Tick\n");
+		printf("\n");
+		
+		int selection = getchar();
+		int rowsEliminatedOnTick;
+	
+		switch((char) selection) {
+			case 'a':
+				move(&fallingPiece, false, board);
+				break;
+			case 'd':
+				move(&fallingPiece, true, board);
+				break;
+			case 'w':
+				rotate(&fallingPiece, true, board);
+				break;
+			case 's':
+				rotate(&fallingPiece, false, board);
+				break;
+			case 'b':
+				useBonus = true;
+			case 't':
+				rowsEliminatedOnTick = tick(&fallingPiece, board, &bonusPiece, &useBonus, &hasBonus);
+				if(rowsEliminatedOnTick == -1) {
+					gameOver = true;
+				}
+				score += rowsEliminatedOnTick;
+				if(!hasBonus) {
+					bonusPiecePotential += rowsEliminatedOnTick;
+				}
+				if(bonusPiecePotential >= NEEDED_BONUS_PIECE_POTENTIAL) {
+					newFallingPiece(&bonusPiece);
+					bonusPiecePotential = 0;
+					hasBonus = true;
+				}
+				break;
+			
+		}		
+
+		// delaySeconds(tickLengthSeconds);
 	        displayBoard(&fallingPiece, board);
-		printf("After print\n");
+		displayBonusPiece(&bonusPiece);
+
+		printf("Score: %d\n\n", score);
     	}
 
-	prinf("DONE\n");
+	printf("DONE\n");
 }
 
 
