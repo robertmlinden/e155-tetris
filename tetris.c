@@ -125,10 +125,10 @@ void main(void) {
 
 	srand(time(NULL));
 
-	FallingPiece fallingPiece, bonusPiece;
+	FallingPiece fallingPiece/*, bonusPiece*/;
 
 	// A flag indicating that there is a available bonus piece
-	bool hasBonus = false;
+	// bool hasBonus = false;
     
 	char board[BOARD_WIDTH][BOARD_HEIGHT];
 	
@@ -137,10 +137,10 @@ void main(void) {
 	
 	int tickLengthSeconds = 1;
 	int score = 0;
-	int bonusPiecePotential = 0;
+	// int bonusPiecePotential = 0;
 
 	bool gameOver = false;
-	bool useBonus = false;
+	// bool useBonus = false;
 
 	while(!gameOver) {
 		printf("Enter a one-letter command:\n");
@@ -169,13 +169,15 @@ void main(void) {
 				rotate(&fallingPiece, false, board);
 				break;
 			case 'b':
-				useBonus = true;
+				// useBonus = true;
+				break;
 			case 't':
-				rowsEliminatedOnTick = tick(&fallingPiece, board, &bonusPiece, &useBonus, &hasBonus);
+				rowsEliminatedOnTick = tick(&fallingPiece, board/*, &bonusPiece, &useBonus, &hasBonus*/);
 				if(rowsEliminatedOnTick == -1) {
 					gameOver = true;
 				}
 				score += rowsEliminatedOnTick;
+				/*
 				if(!hasBonus) {
 					bonusPiecePotential += rowsEliminatedOnTick;
 				}
@@ -184,13 +186,15 @@ void main(void) {
 					bonusPiecePotential = 0;
 					hasBonus = true;
 				}
+				*/
 				break;
 			
 		}		
 
+		printf("AAAA\n");
 		// delaySeconds(tickLengthSeconds);
 	        displayBoard(&fallingPiece, board);
-		displayBonusPiece(&bonusPiece);
+		// displayBonusPiece(&bonusPiece);
 
 		printf("Score: %d\n\n", score);
     	}

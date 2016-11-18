@@ -201,25 +201,25 @@ void newFallingPiece(FallingPiece* fallingPiece) {
 
 	// DETERMINE EXACT COORDINATES FOR EACH STARTING PIECE
 
-	if (pieceShape == 0) {
+	if (fallingPiece->pieceShape == S) {
 		fallingPiece->r = -1;
 		fallingPiece->c = 5;
-	} else if (pieceShape == 1){
+	} else if (fallingPiece->pieceShape == Z){
 		fallingPiece->r = -1;
 		fallingPiece->c = 4;
-	} else if (pieceShape == 2){
+	} else if (fallingPiece->pieceShape == I){
 		fallingPiece->r = -1;
 		fallingPiece->c = 4;
-	} else if (pieceShape == 3){
+	} else if (fallingPiece->pieceShape == O){
 		fallingPiece->r = -2;
 		fallingPiece->c = 5;
-	} else if (pieceShape == 4){
+	} else if (fallingPiece->pieceShape == T){
 		fallingPiece->r = -1;
 		fallingPiece->c = 4;
-	} else if (pieceShape == 5){
+	} else if (fallingPiece->pieceShape == L){
 		fallingPiece->r = -1;
 		fallingPiece->c = 5;
-	} else if (pieceShape == 6){
+	} else if (fallingPiece->pieceShape == J){
 		fallingPiece->r = -1;
 		fallingPiece->c = 4;
 	} else {
@@ -253,7 +253,7 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][B
 // Niavely stops a piece when it makes contact with one below
 // Returns the number of rows eliminated due to the tick
 // Returns -1 if the user lost
-int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], FallingPiece* bonusPiece, bool* useBonus, bool* hasBonus) {
+int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]/*, FallingPiece* bonusPiece, bool* useBonus, bool* hasBonus*/) {
 	fallingPiece -> r = (fallingPiece -> r) + 1;
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
@@ -263,7 +263,7 @@ int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], Fall
 	for(r = 0; r < PIECE_BLOCK_SIZE; r++) {
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterTick = r + fallingPiece->r;
-			int boardCAfterTick = c + fallingPiece->c;
+			int boardCAfterTic k = c + fallingPiece->c;
 			if(piece[r][c] != ' ' && board[boardRAfterTick + 1][boardCAfterTick] != ' ') {
 				// The piece needs to stop falling here, so transition to new falling piece
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
@@ -271,6 +271,7 @@ int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], Fall
 					return -1;
 				}
 				int scoreAddition = lineCheck(board);
+				/*
 				if(*useBonus && *hasBonus) {
 					*fallingPiece = *bonusPiece;
 					*useBonus = false;
@@ -280,6 +281,7 @@ int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], Fall
 					*useBonus = false;
 					newFallingPiece(fallingPiece);
 				}
+				*/
 
 				return scoreAddition;
 			}
