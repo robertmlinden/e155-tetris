@@ -253,7 +253,7 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][B
 // Niavely stops a piece when it makes contact with one below
 // Returns the number of rows eliminated due to the tick
 // Returns -1 if the user lost
-int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]/*, FallingPiece* bonusPiece, bool* useBonus, bool* hasBonus*/) {
+int tick(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	fallingPiece -> r = (fallingPiece -> r) + 1;
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
@@ -263,31 +263,20 @@ int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]/*, Fa
 	for(r = 0; r < PIECE_BLOCK_SIZE; r++) {
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterTick = r + fallingPiece->r;
-			int boardCAfterTic k = c + fallingPiece->c;
+			int boardCAfterTick = c + fallingPiece->c;
 			if(piece[r][c] != ' ' && board[boardRAfterTick + 1][boardCAfterTick] != ' ') {
-				// The piece needs to stop falling here, so transition to new falling piece
+				// The piece needs to stop falling here
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
 				if(!continueGame) {
 					return -1;
 				}
-				int scoreAddition = lineCheck(board);
-				/*
-				if(*useBonus && *hasBonus) {
-					*fallingPiece = *bonusPiece;
-					*useBonus = false;
-					*hasBonus = false;
-				}
-				else {
-					*useBonus = false;
-					newFallingPiece(fallingPiece);
-				}
-				*/
+				int scoreAddition = lineCheck(board);				
 
 				return scoreAddition;
 			}
 		}
 	}
-	return 0;
+	return -2;
 }
 
 bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
@@ -302,7 +291,7 @@ bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][B
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterMove = r + fallingPiece->r;
 			int boardCAfterMove = c + fallingPiece->c + h_offset;
-			if(piece[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') {
+			if(boardRAfterMove > 0 && piece[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') {
 				return false;
 			}
 		}
@@ -334,7 +323,7 @@ bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_H
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterRotate = r + fallingPiece->r;
 			int boardCAfterRotate = c + fallingPiece->c;
-			if(!isInBounds(boardRAfterRotate, boardCAfterRotate) || (piece[r][c] != ' ' && board[boardRAfterRotate][boardCAfterRotate] != ' ')) {
+			if(!isInBounds(boardRAfterRotate, boardCAfterRotate) || (boardRAfterRotate > 0 && (piece[r][c] != ' ' && board[boardRAfterRotate][boardCAfterRotate] != ' '))) {
 				// Rotate the piece back because it was invalid
 				if(rotateClockwise) {
 					fallingPiece -> rotation = (fallingPiece -> rotation + 3) % 4;
@@ -362,6 +351,11 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WID
 	int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
 	int fallingPieceColDisplayBegin = fallingPiece -> c;
 	int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
+
+	printf("RB: %d, RE: %d, CB: %d, CE: %d\n\n", fallingPieceRowDisplayBegin,
+						fallingPieceRowDisplayEnd,
+						fallingPieceColDisplayBegin,
+						fallingPieceColDisplayEnd);
 	
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
@@ -372,8 +366,9 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WID
 		for(c = 0; c < BOARD_WIDTH; c++) {
 			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
 								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-				char printChar = (board[r][c] == ' ') ? piece[r - fallingPieceRowDisplayBegin][c - fallingPieceColDisplayBegin] :
-														board[r][c];
+				char printChar = (board[r][c] == ' ') ? 
+						piece[r - fallingPiece -> r][c - fallingPiece -> c] :
+						board[r][c];
 				printf("%c", printChar);
 			}
 			else {
@@ -382,24 +377,48 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WID
 		}
 		printf("\n");
 	}
-}
 
-void displayBonusPiece(FallingPiece* bonusPiece) {
-	printf("\nBonus Piece\n");
-		
-	char bonusPieceDisplay[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	memcpy(bonusPieceDisplay, PIECES[bonusPiece->pieceShape][bonusPiece->rotation], 
-		sizeof(char) * PIECE_BLOCK_SIZE * PIECE_BLOCK_SIZE);
-
-	// Print bonus piece
-	int r, c;
-	for(r = 0; r < PIECE_BLOCK_SIZE; r++) {
-		for(c =0; c < PIECE_BLOCK_SIZE; c++) {
-			printf("%c", bonusPieceDisplay[r][c]);
+	/*
+	for(r = 0; r < BOARD_HEIGHT; r++) {
+		for(c = 0; c < BOARD_WIDTH; c++) {
+			printf("r = %d, c = %dIsInSquare: %d\n", r, c, isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd));
+			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+				char printChar = (board[r][c] == ' ') ? piece[r - fallingPiece -> r][c - fallingPiece -> c] :
+														board[r][c];
+				//printf("%c", printChar);
+			}
+			else {
+				//printf("%c", board[r][c]);
+			}
 		}
 		printf("\n");
 	}
+	*/
 }
+
+
+void displayPiece(FallingPiece* piece) {
+	printf("\nPiece:\n");
+		
+	char pieceDisplay[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	memcpy(pieceDisplay, PIECES[piece->pieceShape][piece->rotation], 
+		sizeof(char) * PIECE_BLOCK_SIZE * PIECE_BLOCK_SIZE);
+
+	// Print piece
+	int r, c;
+	printf("******\n");
+	for(r = 0; r < PIECE_BLOCK_SIZE; r++) {
+		printf("*");
+		for(c =0; c < PIECE_BLOCK_SIZE; c++) {
+			printf("%c", pieceDisplay[r][c]);
+		}
+		printf("*\n");
+	}
+	printf("******\n");
+}
+
 
 bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
