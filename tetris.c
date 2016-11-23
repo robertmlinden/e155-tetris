@@ -34,6 +34,11 @@
 #define SPI_BASE 		(GPIO_BASE + 0x4000)
 #define BLOCK_SIZE              (4*1024)
 
+#define MOVE_LEFT 0x7
+#define MOVE_RIGHT 0x9
+#define ROTATE_CCW 0x8
+#define ROTATE_CW 0x5
+
 volatile unsigned int *spi0; //pointer to base of spi0
 
 // A struct to readably access relevant bits in the spi0 chip select register
@@ -54,6 +59,8 @@ typedef struct
 #define SCLK_FREQ 150000
 
 #define JUNK_BYTE	   0b00000000
+
+#define KEYCHECK_INTERVAL_MICROS 100
 
 // Pointers that will be memory mapped when pioInit() is called
 volatile unsigned int *gpio; //pointer to base of gpio
@@ -189,17 +196,59 @@ void digitalWrite(int pin, int val) {
 	else GPCLR[reg] = 1 << offset;
 }
 
+char spiReceive() {
+	printf("In Receive!!\n");
+	printf("%d", SPI0FIFO);
+	printf("After print FIFO!\n");
+	SPI0FIFO = JUNK_BYTE;
+	printf("Before Second while!\n");
+	while(!SPI0CSbits.DONE);
+	printf("After Second while!\n");
+	return SPI0FIFO;
+}
+
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
-void delayMicrosAndWaitForKeyPress(unsigned int micros) {
+void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece, 
+					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	sys_timer[4] = sys_timer[1] + micros;
 	sys_timer[0] &= 0b0010;
+
+	sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
+	sys_timer[0] &= 0b1000;
+
+	printf("Before While!\n");
+
 	while(!(sys_timer[0] & 0b0010)) {
-		
+		if(sys_timer[0] & 0b1000) {
+			printf("Before Receive!\n");
+			char keyByte = spiReceive();
+			printf("After Receive!\n");
+			if(keyByte >> 7) {
+				char keyCode = (keyByte & 0b1111);
+				switch(keyCode) {
+					case MOVE_LEFT:
+						move(fallingPiece, false, board);
+						break;
+					case MOVE_RIGHT:
+						move(fallingPiece, true, board);
+						break;
+					case ROTATE_CCW:
+						rotate(fallingPiece, false, board);
+						break;
+					case ROTATE_CW:
+						rotate(fallingPiece, true, board);
+						break;
+				}
+			}
+			sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
+			sys_timer[0] &= 0b1000;
+		}
 	}
 }
 
-void delaySecondsAndWaitForKeyPress(double seconds) {
-    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000));
+void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
+					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, board);
 }
 
 void delayMicros(unsigned int micros) {
@@ -209,19 +258,16 @@ void delayMicros(unsigned int micros) {
 }
 
 void delaySeconds(double seconds) {
-	delayMicrosAndWaitForKeyPress((int) (seconds * 1000000));
-}
-
-char spiReceive() {
-	SPI0FIFO = JUNK_BYTE;
-	while(!SPI0CSbits.DONE);
-	return SPI0FIFO;
+	delayMicros((int) (seconds * 1000000));
 }
 
 void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
+	printf("********************************************************\n");
+	printf("Game State\n\n");
 	displayBoard(fallingPiece, board);
 	printf("Score: %d\n\n", score);
 	displayPiece(nextPiece);
+	printf("********************************************************\n");
 }
 
 void main(void) {
@@ -238,7 +284,7 @@ void main(void) {
 	newFallingPiece(&fallingPiece);
 	newFallingPiece(&nextPiece);
 	
-	double tickLengthSeconds = 0.5;
+	double tickLengthSeconds = 0.1;
 	int score = 0;
 
 	bool gameOver = false;
@@ -246,7 +292,9 @@ void main(void) {
 	displays(&fallingPiece, &nextPiece, board, score);
 
 	while(!gameOver) {
- 		delaySecondsAndWaitForKeyPress(tickLengthSeconds);
+		printf("AA\n");
+ 		delaySecondsAndWaitForKeyPress(tickLengthSeconds, &fallingPiece, board);
+		printf("BB\n");
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		displays(&fallingPiece, &nextPiece, board, score);
@@ -287,7 +335,7 @@ void main2(void) {
 	// A flag indicating that there is a available bonus piece
 	// bool hasBonus = false;
     
-	char board[BOARD_WIDTH][BOARD_HEIGHT];
+	char board[BOARD_HEIGHT][BOARD_WIDTH];
 	
 	initBoard(board);
 	newFallingPiece(&fallingPiece);
@@ -300,8 +348,10 @@ void main2(void) {
 	bool gameOver = false;
 	// bool useBonus = false;
 
+	displays(&fallingPiece, &nextPiece, board, score);
+
 	while(!gameOver) {
-		printf("Enter a one-letter command:\n");
+		printf("\nEnter a one-letter command:\n");
 		printf("\ta: Move Left\n");
 		printf("\td: Move Right\n");
 		printf("\tw: Rotate Clockwise\n");
@@ -339,7 +389,8 @@ void main2(void) {
 				}
 				else {
 					score += rowsEliminatedOnTick;
-					// delaySeconds(tickLengthSeconds);
+					newFallingPiece(&fallingPiece);
+					newFallingPiece(&nextPiece);
 				}
 				/*
 				if(!hasBonus) {
@@ -355,13 +406,8 @@ void main2(void) {
 			
 		}		
 
-		printf("AAAA\n");
-		// delaySeconds(tickLengthSeconds);
-	        displayBoard(&fallingPiece, board);
-		displayPiece(&nextPiece);
+		displays(&fallingPiece, &nextPiece, board, score);
 		// displayPiece(&bonusPiece);
-
-		printf("Score: %d\n\n", score);
     	}
 
 	printf("DONE\n");
