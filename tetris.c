@@ -60,7 +60,9 @@ typedef struct
 
 #define JUNK_BYTE	   0b00000000
 
-#define KEYCHECK_INTERVAL_MICROS 100
+#define KEYCHECK_INTERVAL_MICROS 10000
+
+#define TICK_LENGTH_SECONDS 1.0
 
 // Pointers that will be memory mapped when pioInit() is called
 volatile unsigned int *gpio; //pointer to base of gpio
@@ -197,13 +199,9 @@ void digitalWrite(int pin, int val) {
 }
 
 char spiReceive() {
-	printf("In Receive!!\n");
-	printf("%d", SPI0FIFO);
-	printf("After print FIFO!\n");
 	SPI0FIFO = JUNK_BYTE;
-	printf("Before Second while!\n");
 	while(!SPI0CSbits.DONE);
-	printf("After Second while!\n");
+	// printf("%d,", SPI0FIFO);
 	return SPI0FIFO;
 }
 
@@ -216,13 +214,13 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 	sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
 	sys_timer[0] &= 0b1000;
 
-	printf("Before While!\n");
+	// printf("Before While!\n");
 
 	while(!(sys_timer[0] & 0b0010)) {
 		if(sys_timer[0] & 0b1000) {
-			printf("Before Receive!\n");
+			// printf("Before Receive!\n");
 			char keyByte = spiReceive();
-			printf("After Receive!\n");
+			// printf("After Receive!\n");
 			if(keyByte >> 7) {
 				char keyCode = (keyByte & 0b1111);
 				switch(keyCode) {
@@ -272,6 +270,7 @@ void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BO
 
 void main(void) {
 	pioInit();
+	spi0Init();
 	timerInit();
 
 	srand(time(NULL));
@@ -284,7 +283,6 @@ void main(void) {
 	newFallingPiece(&fallingPiece);
 	newFallingPiece(&nextPiece);
 	
-	double tickLengthSeconds = 0.1;
 	int score = 0;
 
 	bool gameOver = false;
@@ -292,9 +290,9 @@ void main(void) {
 	displays(&fallingPiece, &nextPiece, board, score);
 
 	while(!gameOver) {
-		printf("AA\n");
- 		delaySecondsAndWaitForKeyPress(tickLengthSeconds, &fallingPiece, board);
-		printf("BB\n");
+		// printf("AA\n");
+ 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, board);
+		// printf("BB\n");
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		displays(&fallingPiece, &nextPiece, board, score);
@@ -309,7 +307,7 @@ void main(void) {
 			score += rowsEliminatedOnTick;
 			fallingPiece = nextPiece;
 			newFallingPiece(&nextPiece);
-			delaySeconds(tickLengthSeconds);
+			delaySeconds(TICK_LENGTH_SECONDS);
 			displays(&fallingPiece, &nextPiece, board, score);
 		}
      	}
@@ -327,6 +325,7 @@ void main(void) {
 void main2(void) {
 	pioInit();
 	timerInit();
+	spi0Init();
 
 	srand(time(NULL));
 
