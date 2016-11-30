@@ -64,6 +64,8 @@ typedef struct
 
 #define TICK_LENGTH_SECONDS 1.0
 
+#define META_CS_PIN 26
+
 // Pointers that will be memory mapped when pioInit() is called
 volatile unsigned int *gpio; //pointer to base of gpio
 volatile unsigned int *sys_timer; // pointer to base of system timer
@@ -206,12 +208,14 @@ char spiSendReceive(char byte) {
 }
 
 void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+	digitalWrite(META_CS_PIN, 1);
 	int i, j;
 	for(j = 0; j < BOARD_WIDTH; j++) {
 		for(i = BOARD_HEIGHT - 1; i >= 0; i--) {
 			spiSendReceive(board[i][j]);
 		}
 	}
+	digitalWrite(META_CS_PIN, 0);
 }
 
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
@@ -286,6 +290,9 @@ void main(void) {
 	spi0Init();
 	timerInit();
 
+	digitalWrite(META_CS_PIN, 0);
+
+	// Seed our random number generator
 	srand(time(NULL));
 
 	FallingPiece fallingPiece, nextPiece;
@@ -342,6 +349,8 @@ void main2(void) {
 	pioInit();
 	timerInit();
 	spi0Init();
+
+	digitalWrite(META_CS_PIN, 0);
 
 	srand(time(NULL));
 
