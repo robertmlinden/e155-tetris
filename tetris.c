@@ -208,7 +208,7 @@ char spiSendReceive(char byte) {
 void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int i, j;
 	for(j = 0; j < BOARD_WIDTH; j++) {
-		for(i = 0; i < BOARD_HEIGHT; i++) {
+		for(i = BOARD_HEIGHT - 1; i >= 0; i--) {
 			spiSendReceive(board[i][j]);
 		}
 	}
