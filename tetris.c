@@ -198,11 +198,20 @@ void digitalWrite(int pin, int val) {
 	else GPCLR[reg] = 1 << offset;
 }
 
-char spiReceive() {
-	SPI0FIFO = JUNK_BYTE;
+char spiSendReceive(char byte) {
+	SPI0FIFO = byte;
 	while(!SPI0CSbits.DONE);
 	// printf("%d,", SPI0FIFO);
 	return SPI0FIFO;
+}
+
+void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+	int i, j;
+	for(j = 0; j < BOARD_WIDTH; j++) {
+		for(i = 0; i < BOARD_HEIGHT; i++) {
+			spiSendReceive(board[i][j]);
+		}
+	}
 }
 
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
@@ -219,22 +228,26 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 	while(!(sys_timer[0] & 0b0010)) {
 		if(sys_timer[0] & 0b1000) {
 			// printf("Before Receive!\n");
-			char keyByte = spiReceive();
+			char keyByte = spiSendReceive(JUNK_BYTE);
 			// printf("After Receive!\n");
 			if(keyByte >> 7) {
 				char keyCode = (keyByte & 0b1111);
 				switch(keyCode) {
 					case MOVE_LEFT:
 						move(fallingPiece, false, board);
+						sendBoardState(board);
 						break;
 					case MOVE_RIGHT:
 						move(fallingPiece, true, board);
+						sendBoardState(board);
 						break;
 					case ROTATE_CCW:
 						rotate(fallingPiece, false, board);
+						sendBoardState(board);
 						break;
 					case ROTATE_CW:
 						rotate(fallingPiece, true, board);
+						sendBoardState(board);
 						break;
 				}
 			}
@@ -288,6 +301,7 @@ void main(void) {
 	bool gameOver = false;
 
 	displays(&fallingPiece, &nextPiece, board, score);
+	sendBoardState(board);
 
 	while(!gameOver) {
 		// printf("AA\n");
@@ -296,6 +310,7 @@ void main(void) {
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		displays(&fallingPiece, &nextPiece, board, score);
+		sendBoardState(board);
 
 		if(rowsEliminatedOnTick == -1) {
 			gameOver = true;
@@ -309,6 +324,7 @@ void main(void) {
 			newFallingPiece(&nextPiece);
 			delaySeconds(TICK_LENGTH_SECONDS);
 			displays(&fallingPiece, &nextPiece, board, score);
+			sendBoardState(board);
 		}
      	}
 
