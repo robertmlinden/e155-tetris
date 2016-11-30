@@ -351,11 +351,6 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WID
 	int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
 	int fallingPieceColDisplayBegin = fallingPiece -> c;
 	int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
-
-	printf("RB: %d, RE: %d, CB: %d, CE: %d\n\n", fallingPieceRowDisplayBegin,
-						fallingPieceRowDisplayEnd,
-						fallingPieceColDisplayBegin,
-						fallingPieceColDisplayEnd);
 	
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
