@@ -31,7 +31,7 @@ char PIECES[NUM_PIECES][NUM_ROTATIONS][PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE] =
 	},
 	
 	{
-	// Z
+	// Z 
 		{{' ', ' ', ' ', ' '},
 		 {'Z', 'Z', ' ', ' '},
 		 {' ', 'Z', 'Z', ' '},
