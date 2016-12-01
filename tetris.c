@@ -60,7 +60,7 @@ typedef struct
 
 #define JUNK_BYTE	   0b00000000
 
-#define KEYCHECK_INTERVAL_MICROS 10000
+#define KEYCHECK_INTERVAL_MICROS 100
 
 #define TICK_LENGTH_SECONDS 1.0
 
@@ -71,6 +71,7 @@ volatile unsigned int *gpio; //pointer to base of gpio
 volatile unsigned int *sys_timer; // pointer to base of system timer
 
 const unsigned int CLK_FREQ = 1200000000;
+bool acceptNewKeystroke = true;
 
 void pinMode(int pin, int function)
 {
@@ -234,26 +235,34 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 			// printf("Before Receive!\n");
 			char keyByte = spiSendReceive(JUNK_BYTE);
 			// printf("After Receive!\n");
+			// printf("Key Byte = \"%d\", ", keyByte);
 			if(keyByte >> 7) {
-				char keyCode = (keyByte & 0b1111);
-				switch(keyCode) {
-					case MOVE_LEFT:
-						move(fallingPiece, false, board);
-						sendBoardState(board);
-						break;
-					case MOVE_RIGHT:
-						move(fallingPiece, true, board);
-						sendBoardState(board);
-						break;
-					case ROTATE_CCW:
-						rotate(fallingPiece, false, board);
-						sendBoardState(board);
-						break;
-					case ROTATE_CW:
-						rotate(fallingPiece, true, board);
-						sendBoardState(board);
-						break;
+				if(acceptNewKeystroke) {
+					acceptNewKeystroke = false;
+					char keyCode = (keyByte & 0b1111);
+					switch(keyCode) {
+						case MOVE_LEFT:
+							move(fallingPiece, false, board);
+							sendBoardState(board);
+							break;
+						case MOVE_RIGHT:
+							move(fallingPiece, true, board);
+							sendBoardState(board);
+							break;
+						case ROTATE_CCW:
+							rotate(fallingPiece, false, board);
+							sendBoardState(board);
+							break;
+						case ROTATE_CW:
+							rotate(fallingPiece, true, board);
+							sendBoardState(board);
+							break;
+					}
 				}
+				
+			}
+			else {
+				acceptNewKeystroke = true;
 			}
 			sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
 			sys_timer[0] &= 0b1000;
@@ -308,7 +317,7 @@ void main(void) {
 	bool gameOver = false;
 
 	displays(&fallingPiece, &nextPiece, board, score);
-	sendBoardState(board);
+	// sendBoardState(board);
 
 	while(!gameOver) {
 		// printf("AA\n");
@@ -317,7 +326,7 @@ void main(void) {
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		displays(&fallingPiece, &nextPiece, board, score);
-		sendBoardState(board);
+		// sendBoardState(board);
 
 		if(rowsEliminatedOnTick == -1) {
 			gameOver = true;
@@ -331,7 +340,7 @@ void main(void) {
 			newFallingPiece(&nextPiece);
 			delaySeconds(TICK_LENGTH_SECONDS);
 			displays(&fallingPiece, &nextPiece, board, score);
-			sendBoardState(board);
+			// sendBoardState(board);
 		}
      	}
 
