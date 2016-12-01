@@ -25,6 +25,11 @@ typedef struct {
 	int c;
 } FallingPiece;
 
+typedef struct {
+	int row, col;
+	char value;
+} LedPixel;
+
 #define NUM_PIECES 7
 #define NUM_ROTATIONS 4
 #define PIECE_BLOCK_SIZE 4

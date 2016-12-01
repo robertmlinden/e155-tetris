@@ -66,6 +66,8 @@ typedef struct
 
 #define META_CS_PIN 26
 
+#define N 32
+
 // Pointers that will be memory mapped when pioInit() is called
 volatile unsigned int *gpio; //pointer to base of gpio
 volatile unsigned int *sys_timer; // pointer to base of system timer
@@ -208,6 +210,14 @@ char spiSendReceive(char byte) {
 	return SPI0FIFO;
 }
 
+void spiSendUpdatedPixel(char value, int row, int col) {
+	SPI0CSbits.TA = 1;
+	spiSendReceive((char) (row & 0xFF));
+	spiSendReceive((char) (col & 0xFF));
+	spiSendReceive(value);
+	SPI0CSbits.TA = 0;
+}
+
 void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	digitalWrite(META_CS_PIN, 1);
 	int i, j;
@@ -294,6 +304,46 @@ void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BO
 	printf("********************************************************\n");
 }
 
+void gameBoardToLedBoardCoords(int* row, int* col) {
+	int temp = *col;
+	*col = 26 - *row;
+	*row = temp + 2;
+}
+
+void ledBoardToGameBoardCoords(int* row, int* col) {
+	int temp = *col;
+	*col = *row - 2;
+	*row = 26 - temp;
+}
+
+bool isBoardSquare(int row, int col) {
+	return row >= 0 && row <= BOARD_HEIGHT && col >= 0 && col <= BOARD_WIDTH;
+}
+
+void initChangedPixels(LedPixel* changedPixels, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+	int lrow, lcol;
+	for(lrow = 0; lrow < N; lrow++) {
+		for(lcol = 0; lcol < N; lcol++) {
+			int row, col;
+			ledBoardToGameBoardCoords(&row, &col);
+
+			int index = (lrow * N) + lcol;
+
+			LedPixel ledPixel;
+			ledPixel.row = row;
+			ledPixel.col = col;
+
+			if(isBoardSquare(row, col)) {				
+				ledPixel.value = board[row][col];
+			}
+			else {
+				 ledPixel.value = " ";
+			}
+			changedPixels[index] = ledPixel;
+		}
+	}
+}
+
 void main(void) {
 	pioInit();
 	spi0Init();
@@ -311,6 +361,9 @@ void main(void) {
 	initBoard(board);
 	newFallingPiece(&fallingPiece);
 	newFallingPiece(&nextPiece);
+
+	LedPixel* changedPixels = malloc(32 * 32 * sizeof(LedPixel));
+	initChangedPixels(changedPixels, board);
 	
 	int score = 0;
 
@@ -323,7 +376,7 @@ void main(void) {
 		// printf("AA\n");
  		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, board);
 		// printf("BB\n");
- 		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
+ 		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board, changedPixels);
 
 		displays(&fallingPiece, &nextPiece, board, score);
 		// sendBoardState(board);
@@ -337,14 +390,15 @@ void main(void) {
 		else {
 			score += rowsEliminatedOnTick;
 			fallingPiece = nextPiece;
-			newFallingPiece(&nextPiece);
 			delaySeconds(TICK_LENGTH_SECONDS);
+			newFallingPiece(&nextPiece);
 			displays(&fallingPiece, &nextPiece, board, score);
 			// sendBoardState(board);
 		}
      	}
 
 	printf("DONE\n");
+	free(changedPixels);
 }
 
 /*
