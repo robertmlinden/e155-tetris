@@ -64,7 +64,7 @@ typedef struct
 
 #define TICK_LENGTH_SECONDS 1.0
 
-#define META_CS_PIN 26
+#define RESET 12
 
 #define N 32
 
@@ -196,6 +196,43 @@ void timerInit() {
 	sys_timer = (volatile unsigned *)reg_map;
 }
 
+void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
+	printf("********************************************************\n");
+	printf("Game State\n\n");
+	displayBoard(fallingPiece, board);
+	printf("Score: %d\n\n", score);
+	displayPiece(nextPiece);
+	printf("********************************************************\n");
+}
+
+void gameBoardToLedBoardCoords(int* row, int* col) {
+	int temp = *col;
+	*col = 26 - *row;
+	*row = temp + 2;
+}
+
+void ledBoardToGameBoardCoords(int* row, int* col) {
+	// printf("%d, %d, ", *row, *col);
+	int temp = *col;
+	*col = *row - 2;
+	*row = 26 - temp;
+	// printf("%d, %d\n", *row, *col);
+}
+
+bool isBoardSquare(int row, int col) {
+	return row >= 0 && row < BOARD_HEIGHT && col >= 0 && col < BOARD_WIDTH;
+}
+
+void delayMicros(unsigned int micros) {
+	sys_timer[4] = sys_timer[1] + micros;
+	sys_timer[0] &= 0b0010;
+	while(!(sys_timer[0] & 0b0010));
+}
+
+void delaySeconds(double seconds) {
+	delayMicros((int) (seconds * 1000000));
+}
+
 void digitalWrite(int pin, int val) {
 	int reg = pin / 32;
 	int offset = pin % 32;
@@ -219,19 +256,41 @@ void spiSendUpdatedPixel(char value, int row, int col) {
 }
 
 void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-	digitalWrite(META_CS_PIN, 1);
-	int i, j;
-	for(j = 0; j < BOARD_WIDTH; j++) {
-		for(i = BOARD_HEIGHT - 1; i >= 0; i--) {
-			spiSendReceive(board[i][j]);
+	digitalWrite(RESET, 1);
+	delayMicros(5);
+	spiSendReceive(JUNK_BYTE);
+	digitalWrite(RESET, 0);
+
+	int numSpacesSent = 0;
+
+	int lrow, lcol;
+	for(lrow = 0; lrow < N; lrow++) {
+		for(lcol = 0; lcol < N; lcol++) {
+			// printf("(%d, %d)\n", lrow, lcol);
+			int brow = lrow;
+			int bcol = lcol;
+			ledBoardToGameBoardCoords(&brow, &bcol);
+			if(isBoardSquare(brow, bcol)) {				
+				spiSendReceive(board[brow][bcol]);
+				if(board[brow][bcol] == ' ') numSpacesSent++;
+				// printf("%c", board[brow][bcol]);
+				// printf("%d,", board[brow][bcol]);
+			}
+			else {
+				spiSendReceive(' ');
+				numSpacesSent++;
+				// printf("%d, ", ((int)(' ')));
+			}
 		}
+		// printf("\n");
 	}
-	digitalWrite(META_CS_PIN, 0);
+	printf("Number of spaces sent: %d\n", numSpacesSent);
 }
 
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
-void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece, 
-					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
+					FallingPiece* nextPiece, 
+					char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
 	sys_timer[4] = sys_timer[1] + micros;
 	sys_timer[0] &= 0b0010;
 
@@ -254,18 +313,22 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 						case MOVE_LEFT:
 							move(fallingPiece, false, board);
 							sendBoardState(board);
+							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case MOVE_RIGHT:
 							move(fallingPiece, true, board);
 							sendBoardState(board);
+							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case ROTATE_CCW:
 							rotate(fallingPiece, false, board);
 							sendBoardState(board);
+							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case ROTATE_CW:
 							rotate(fallingPiece, true, board);
 							sendBoardState(board);
+							displays(fallingPiece, nextPiece, board, score);
 							break;
 					}
 				}
@@ -281,44 +344,85 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 }
 
 void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
-					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, board);
+					FallingPiece* nextPiece,
+					char board[BOARD_HEIGHT][BOARD_WIDTH],
+					int score) {
+    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, board, score);
 }
 
-void delayMicros(unsigned int micros) {
-	sys_timer[4] = sys_timer[1] + micros;
-	sys_timer[0] &= 0b0010;
-	while(!(sys_timer[0] & 0b0010));
+void main(void) {
+	pioInit();
+	spi0Init();
+	timerInit();
+
+	digitalWrite(RESET, 0);
+
+	// Seed our random number generator
+	srand(time(NULL));
+
+	FallingPiece fallingPiece, nextPiece;
+    
+	char board[BOARD_HEIGHT][BOARD_WIDTH];
+	
+	initBoard(board);
+	newFallingPiece(&fallingPiece);
+	newFallingPiece(&nextPiece);
+
+	// LedPixel* changedPixels = malloc(32 * 32 * sizeof(LedPixel));
+	// initChangedPixels(changedPixels, board);
+	
+	int score = 0;
+
+	bool gameOver = false;
+
+	displays(&fallingPiece, &nextPiece, board, score);
+	// printf("GOT HERE\n");
+	sendBoardState(board);
+
+	printf("BOARD STATE SENT!!\n");
+
+	while(!gameOver) {
+		// printf("AA\n");
+ 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, board, score);
+		// printf("BB\n");
+ 		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
+
+		displays(&fallingPiece, &nextPiece, board, score);
+		sendBoardState(board);
+		printf("BOARD STATE SENT!!\n");
+
+		if(rowsEliminatedOnTick == -1) {
+			gameOver = true;
+		}
+		else if(rowsEliminatedOnTick == -2) {
+			// This is not a piece transition, Nothing to do here
+		}
+		else {
+			score += rowsEliminatedOnTick;
+			fallingPiece = nextPiece;
+			
+			int time = sys_timer[1];
+			printf("%d -> ", time);
+
+			delaySeconds(TICK_LENGTH_SECONDS);
+
+
+			printf("%d\n", sys_timer[1]);
+			printf("%d\n", (sys_timer[1] - time));
+
+			newFallingPiece(&nextPiece);
+			displays(&fallingPiece, &nextPiece, board, score);
+			sendBoardState(board);
+			printf("BOARD STATE SENT!!\n");
+		}
+     	}
+
+	printf("DONE\n");
+	// free(changedPixels);
 }
 
-void delaySeconds(double seconds) {
-	delayMicros((int) (seconds * 1000000));
-}
 
-void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
-	printf("********************************************************\n");
-	printf("Game State\n\n");
-	displayBoard(fallingPiece, board);
-	printf("Score: %d\n\n", score);
-	displayPiece(nextPiece);
-	printf("********************************************************\n");
-}
-
-void gameBoardToLedBoardCoords(int* row, int* col) {
-	int temp = *col;
-	*col = 26 - *row;
-	*row = temp + 2;
-}
-
-void ledBoardToGameBoardCoords(int* row, int* col) {
-	int temp = *col;
-	*col = *row - 2;
-	*row = 26 - temp;
-}
-
-bool isBoardSquare(int row, int col) {
-	return row >= 0 && row <= BOARD_HEIGHT && col >= 0 && col <= BOARD_WIDTH;
-}
+/////////////////////////////////////////////////////
 
 void initChangedPixels(LedPixel* changedPixels, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int lrow, lcol;
@@ -337,189 +441,9 @@ void initChangedPixels(LedPixel* changedPixels, char board[BOARD_HEIGHT][BOARD_W
 				ledPixel.value = board[row][col];
 			}
 			else {
-				 ledPixel.value = " ";
+				 ledPixel.value = ' ';
 			}
 			changedPixels[index] = ledPixel;
 		}
 	}
 }
-
-void main(void) {
-	pioInit();
-	spi0Init();
-	timerInit();
-
-	digitalWrite(META_CS_PIN, 0);
-
-	// Seed our random number generator
-	srand(time(NULL));
-
-	FallingPiece fallingPiece, nextPiece;
-    
-	char board[BOARD_HEIGHT][BOARD_WIDTH];
-	
-	initBoard(board);
-	newFallingPiece(&fallingPiece);
-	newFallingPiece(&nextPiece);
-
-	LedPixel* changedPixels = malloc(32 * 32 * sizeof(LedPixel));
-	initChangedPixels(changedPixels, board);
-	
-	int score = 0;
-
-	bool gameOver = false;
-
-	displays(&fallingPiece, &nextPiece, board, score);
-	// sendBoardState(board);
-
-	while(!gameOver) {
-		// printf("AA\n");
- 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, board);
-		// printf("BB\n");
- 		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board, changedPixels);
-
-		displays(&fallingPiece, &nextPiece, board, score);
-		// sendBoardState(board);
-
-		if(rowsEliminatedOnTick == -1) {
-			gameOver = true;
-		}
-		else if(rowsEliminatedOnTick == -2) {
-			// This is not a piece transition, Nothing to do here
-		}
-		else {
-			score += rowsEliminatedOnTick;
-			fallingPiece = nextPiece;
-			delaySeconds(TICK_LENGTH_SECONDS);
-			newFallingPiece(&nextPiece);
-			displays(&fallingPiece, &nextPiece, board, score);
-			// sendBoardState(board);
-		}
-     	}
-
-	printf("DONE\n");
-	free(changedPixels);
-}
-
-/*
-	5 = rotateCW 1000
-	7 = moveLeft 0100
-	8 = rotateCCW 0010
-	9 = moveRightRight 0001
-	0 = accelerateDownward 1111
-*/
-void main2(void) {
-	pioInit();
-	timerInit();
-	spi0Init();
-
-	digitalWrite(META_CS_PIN, 0);
-
-	srand(time(NULL));
-
-	FallingPiece fallingPiece, nextPiece/*, bonusPiece*/;
-
-	// A flag indicating that there is a available bonus piece
-	// bool hasBonus = false;
-    
-	char board[BOARD_HEIGHT][BOARD_WIDTH];
-	
-	initBoard(board);
-	newFallingPiece(&fallingPiece);
-	newFallingPiece(&nextPiece);
-	
-	int tickLengthSeconds = 1;
-	int score = 0;
-	// int bonusPiecePotential = 0;
-
-	bool gameOver = false;
-	// bool useBonus = false;
-
-	displays(&fallingPiece, &nextPiece, board, score);
-
-	while(!gameOver) {
-		printf("\nEnter a one-letter command:\n");
-		printf("\ta: Move Left\n");
-		printf("\td: Move Right\n");
-		printf("\tw: Rotate Clockwise\n");
-		printf("\ts: Rotate Counterclockwise\n");
-		printf("\tb: Use bonus piece (if available) for next piece\n");
-		printf("\tt: Tick\n");
-		printf("\n");
-		
-		int selection = getchar();
-		int rowsEliminatedOnTick;
-	
-		switch((char) selection) {
-			case 'a':
-				move(&fallingPiece, false, board);
-				break;
-			case 'd':
-				move(&fallingPiece, true, board);
-				break;
-			case 'w':
-				rotate(&fallingPiece, true, board);
-				break;
-			case 's':
-				rotate(&fallingPiece, false, board);
-				break;
-			case 'b':
-				// useBonus = true;
-				break;
-			case 't':
-				rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board/*, &bonusPiece, &useBonus, &hasBonus*/);
-				if(rowsEliminatedOnTick == -1) {
-					gameOver = true;
-				}
-				else if(rowsEliminatedOnTick == -2) {
-					// This is not a piece transition, Nothing to do here
-				}
-				else {
-					score += rowsEliminatedOnTick;
-					newFallingPiece(&fallingPiece);
-					newFallingPiece(&nextPiece);
-				}
-				/*
-				if(!hasBonus) {
-					bonusPiecePotential += rowsEliminatedOnTick;
-				}
-				if(bonusPiecePotential >= NEEDED_BONUS_PIECE_POTENTIAL) {
-					newFallingPiece(&bonusPiece);
-					bonusPiecePotential = 0;
-					hasBonus = true;
-				}
-				*/
-				break;
-			
-		}		
-
-		displays(&fallingPiece, &nextPiece, board, score);
-		// displayPiece(&bonusPiece);
-    	}
-
-	printf("DONE\n");
-}
-
-
-// Not Needed //////////////////////////////////////////////////////////////////////////
-
-/*
-void playnote(int pitch, int duration) {
-	sys_timer[6] = sys_timer[1] + duration * 1000;
-	sys_timer[0] &= 0b1000;
-	if(pitch) {
-		while(!(sys_timer[0] & 0b1000)) {
-			digitalWrite(26, 1);
-	
-			delayMicros(1000000/pitch/2);
-	
-			digitalWrite(26, 0);
-	
-			delayMicros(1000000/pitch/2);
-		}
-	}
-	else {
-		delayMicros(duration * 1000);
-	}
-}
-*/
