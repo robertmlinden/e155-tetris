@@ -340,6 +340,11 @@ bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_H
 	return true;
 }
 
+void getPiece(char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE], FallingPiece* fallingPiece) {
+	memcpy(piece, PIECES[fallingPiece->pieceShape][fallingPiece->rotation], 
+		sizeof(char) * PIECE_BLOCK_SIZE * PIECE_BLOCK_SIZE);
+}
+
 // Allow r <= 0 for start placement
 // Can utilize isInSquare() if appropriate
 bool isInBounds(r, c) {

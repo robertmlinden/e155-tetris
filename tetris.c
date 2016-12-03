@@ -255,13 +255,16 @@ void spiSendUpdatedPixel(char value, int row, int col) {
 	SPI0CSbits.TA = 0;
 }
 
-void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+void sendBoardState(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	digitalWrite(RESET, 1);
 	delayMicros(5);
 	spiSendReceive(JUNK_BYTE);
 	digitalWrite(RESET, 0);
 
 	int numSpacesSent = 0;
+
+	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	getPiece(piece, fallingPiece);
 
 	int lrow, lcol;
 	for(lrow = 0; lrow < N; lrow++) {
@@ -270,9 +273,26 @@ void sendBoardState(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 			int brow = lrow;
 			int bcol = lcol;
 			ledBoardToGameBoardCoords(&brow, &bcol);
-			if(isBoardSquare(brow, bcol)) {				
-				spiSendReceive(board[brow][bcol]);
-				if(board[brow][bcol] == ' ') numSpacesSent++;
+			if(isBoardSquare(brow, bcol)) {
+				int fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
+				int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
+				int fallingPieceColDisplayBegin = fallingPiece -> c;
+				int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
+
+				if(isInSquare(brow, bcol, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+					char sendChar = (board[brow][bcol] == ' ') ? 
+							piece[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
+							board[brow][bcol];
+					spiSendReceive(sendChar);
+					if(sendChar == ' ') numSpacesSent++;
+				}
+				else {
+					spiSendReceive(board[brow][bcol]);
+					if(board[brow][bcol] == ' ') numSpacesSent++;
+				}
+			
+				// spiSendReceive(board[brow][bcol]);
 				// printf("%c", board[brow][bcol]);
 				// printf("%d,", board[brow][bcol]);
 			}
@@ -312,22 +332,22 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 					switch(keyCode) {
 						case MOVE_LEFT:
 							move(fallingPiece, false, board);
-							sendBoardState(board);
+							sendBoardState(fallingPiece, board);
 							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case MOVE_RIGHT:
 							move(fallingPiece, true, board);
-							sendBoardState(board);
+							sendBoardState(fallingPiece, board);
 							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case ROTATE_CCW:
 							rotate(fallingPiece, false, board);
-							sendBoardState(board);
+							sendBoardState(fallingPiece, board);
 							displays(fallingPiece, nextPiece, board, score);
 							break;
 						case ROTATE_CW:
 							rotate(fallingPiece, true, board);
-							sendBoardState(board);
+							sendBoardState(fallingPiece, board);
 							displays(fallingPiece, nextPiece, board, score);
 							break;
 					}
@@ -377,7 +397,7 @@ void main(void) {
 
 	displays(&fallingPiece, &nextPiece, board, score);
 	// printf("GOT HERE\n");
-	sendBoardState(board);
+	sendBoardState(&fallingPiece, board);
 
 	printf("BOARD STATE SENT!!\n");
 
@@ -388,7 +408,7 @@ void main(void) {
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		displays(&fallingPiece, &nextPiece, board, score);
-		sendBoardState(board);
+		sendBoardState(&fallingPiece, board);
 		printf("BOARD STATE SENT!!\n");
 
 		if(rowsEliminatedOnTick == -1) {
@@ -412,7 +432,7 @@ void main(void) {
 
 			newFallingPiece(&nextPiece);
 			displays(&fallingPiece, &nextPiece, board, score);
-			sendBoardState(board);
+			sendBoardState(&fallingPiece, board);
 			printf("BOARD STATE SENT!!\n");
 		}
      	}
