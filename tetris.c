@@ -38,6 +38,7 @@
 #define MOVE_RIGHT 0x9
 #define ROTATE_CCW 0x8
 #define ROTATE_CW 0x5
+#define USE_BONUS 0xB
 
 volatile unsigned int *spi0; //pointer to base of spi0
 
@@ -64,6 +65,8 @@ typedef struct
 
 #define TICK_LENGTH_SECONDS 1.0
 
+#define BONUS_PIECE_POTENTIAL_NEEDED 1
+
 #define RESET 12
 
 #define N 32
@@ -74,6 +77,7 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 
 const unsigned int CLK_FREQ = 1200000000;
 bool acceptNewKeystroke = true;
+bool useBonusPiece = false;
 
 void pinMode(int pin, int function)
 {
@@ -196,12 +200,16 @@ void timerInit() {
 	sys_timer = (volatile unsigned *)reg_map;
 }
 
-void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
+void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, FallingPiece* bonusPiece,
+		char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
 	printf("********************************************************\n");
 	printf("Game State\n\n");
 	displayBoard(fallingPiece, board);
 	printf("Score: %d\n\n", score);
 	displayPiece(nextPiece);
+	if(bonusPiece -> pieceShape != NONEXISTENT) {
+		displayPiece(bonusPiece);
+	}
 	printf("********************************************************\n");
 }
 
@@ -309,7 +317,7 @@ void sendBoardState(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_W
 
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
 void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
-					FallingPiece* nextPiece, 
+					FallingPiece* nextPiece, FallingPiece* bonusPiece,
 					char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
 	sys_timer[4] = sys_timer[1] + micros;
 	sys_timer[0] &= 0b0010;
@@ -333,22 +341,25 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 						case MOVE_LEFT:
 							move(fallingPiece, false, board);
 							sendBoardState(fallingPiece, board);
-							displays(fallingPiece, nextPiece, board, score);
+							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case MOVE_RIGHT:
 							move(fallingPiece, true, board);
 							sendBoardState(fallingPiece, board);
-							displays(fallingPiece, nextPiece, board, score);
+							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CCW:
 							rotate(fallingPiece, false, board);
 							sendBoardState(fallingPiece, board);
-							displays(fallingPiece, nextPiece, board, score);
+							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CW:
 							rotate(fallingPiece, true, board);
 							sendBoardState(fallingPiece, board);
-							displays(fallingPiece, nextPiece, board, score);
+							displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							break;
+						case USE_BONUS:
+							useBonusPiece = true;
 							break;
 					}
 				}
@@ -365,12 +376,13 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 
 void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece,
+					FallingPiece* bonusPiece,
 					char board[BOARD_HEIGHT][BOARD_WIDTH],
 					int score) {
-    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, board, score);
+    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board, score);
 }
 
-void main(void) {
+void main2(void) {
 	pioInit();
 	spi0Init();
 	timerInit();
@@ -380,22 +392,25 @@ void main(void) {
 	// Seed our random number generator
 	srand(time(NULL));
 
-	FallingPiece fallingPiece, nextPiece;
+	FallingPiece fallingPiece, nextPiece, bonusPiece;
     
 	char board[BOARD_HEIGHT][BOARD_WIDTH];
 	
 	initBoard(board);
 	newFallingPiece(&fallingPiece);
 	newFallingPiece(&nextPiece);
+	bonusPiece.pieceShape = NONEXISTENT;
 
 	// LedPixel* changedPixels = malloc(32 * 32 * sizeof(LedPixel));
 	// initChangedPixels(changedPixels, board);
 	
 	int score = 0;
 
+	int bonusPiecePotential = 0;
+
 	bool gameOver = false;
 
-	displays(&fallingPiece, &nextPiece, board, score);
+	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 	// printf("GOT HERE\n");
 	sendBoardState(&fallingPiece, board);
 
@@ -403,11 +418,16 @@ void main(void) {
 
 	while(!gameOver) {
 		// printf("AA\n");
- 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, board, score);
+ 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
 		// printf("BB\n");
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
-		displays(&fallingPiece, &nextPiece, board, score);
+		bonusPiecePotential += rowsEliminatedOnTick;
+		if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED) {
+			newFallingPiece(&bonusPiece);
+		}
+
+		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 		sendBoardState(&fallingPiece, board);
 		printf("BOARD STATE SENT!!\n");
 
@@ -419,19 +439,20 @@ void main(void) {
 		}
 		else {
 			score += rowsEliminatedOnTick;
-			fallingPiece = nextPiece;
-			
-			int time = sys_timer[1];
-			printf("%d -> ", time);
 
 			delaySeconds(TICK_LENGTH_SECONDS);
 
+			if(useBonusPiece) {
+				fallingPiece = bonusPiece;
+				bonusPiece.pieceShape = NONEXISTENT;
+				useBonusPiece = false;
+			}
+			else {
+				fallingPiece = nextPiece;
+				newFallingPiece(&nextPiece);
+			}
 
-			printf("%d\n", sys_timer[1]);
-			printf("%d\n", (sys_timer[1] - time));
-
-			newFallingPiece(&nextPiece);
-			displays(&fallingPiece, &nextPiece, board, score);
+			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 			sendBoardState(&fallingPiece, board);
 			printf("BOARD STATE SENT!!\n");
 		}
@@ -439,6 +460,105 @@ void main(void) {
 
 	printf("DONE\n");
 	// free(changedPixels);
+}
+
+void main(void) {
+	pioInit();
+	timerInit();
+	spi0Init();
+
+	srand(time(NULL));
+
+	FallingPiece fallingPiece, nextPiece, bonusPiece;
+
+	// A flag indicating that there is a available bonus piece
+	// bool hasBonus = false;
+    
+	char board[BOARD_HEIGHT][BOARD_WIDTH];
+	
+	initBoard(board);
+	newFallingPiece(&fallingPiece);
+	newFallingPiece(&nextPiece);
+	bonusPiece.pieceShape = NONEXISTENT;
+	
+	int tickLengthSeconds = 1;
+	int score = 0;
+	int bonusPiecePotential = 0;
+
+	bool gameOver = false;
+	// bool useBonus = false;
+
+	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+
+	while(!gameOver) {
+		printf("\nEnter a one-letter command:\n");
+		printf("\ta: Move Left\n");
+		printf("\td: Move Right\n");
+		printf("\tw: Rotate Clockwise\n");
+		printf("\ts: Rotate Counterclockwise\n");
+		printf("\tb: Use bonus piece (if available) for next piece\n");
+		printf("\tt: Tick\n");
+		printf("\n");
+		
+		int selection = getchar();
+		int rowsEliminatedOnTick;
+	
+		switch((char) selection) {
+			case 'a':
+				move(&fallingPiece, false, board);
+				break;
+			case 'd':
+				move(&fallingPiece, true, board);
+				break;
+			case 'w':
+				rotate(&fallingPiece, true, board);
+				break;
+			case 's':
+				rotate(&fallingPiece, false, board);
+				break;
+			case 'b':
+				if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED) {
+					useBonusPiece = true;
+					printf("ACTIVATED!!\n");
+				}
+				break;
+			case 't':
+				rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
+				bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
+				printf("Bonus Piece Potential = %d\n", bonusPiecePotential);
+				if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
+						bonusPiece.pieceShape == NONEXISTENT) {
+					newFallingPiece(&bonusPiece);
+				}
+
+				if(rowsEliminatedOnTick == -1) {
+					gameOver = true;
+				}
+				else if(rowsEliminatedOnTick == -2) {
+					// This is not a piece transition, Nothing to do here
+				}
+				else {
+					score += rowsEliminatedOnTick;
+					if(useBonusPiece) {
+						fallingPiece = bonusPiece;
+						bonusPiece.pieceShape = NONEXISTENT;
+						useBonusPiece = false;
+						bonusPiecePotential = 0;
+					}
+					else {
+						fallingPiece = nextPiece;
+						newFallingPiece(&nextPiece);
+					}
+				}
+				
+				break;
+			
+		}		
+
+		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+    	}
+
+	printf("DONE\n");
 }
 
 

@@ -377,25 +377,6 @@ void displayBoard(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WID
 		}
 		printf("\n");
 	}
-
-	/*
-	for(r = 0; r < BOARD_HEIGHT; r++) {
-		for(c = 0; c < BOARD_WIDTH; c++) {
-			printf("r = %d, c = %dIsInSquare: %d\n", r, c, isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd));
-			if(isInSquare(r, c, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-				char printChar = (board[r][c] == ' ') ? piece[r - fallingPiece -> r][c - fallingPiece -> c] :
-														board[r][c];
-				//printf("%c", printChar);
-			}
-			else {
-				//printf("%c", board[r][c]);
-			}
-		}
-		printf("\n");
-	}
-	*/
 }
 
 

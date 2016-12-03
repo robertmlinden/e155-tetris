@@ -25,6 +25,8 @@ typedef struct {
 	int c;
 } FallingPiece;
 
+#define NONEXISTENT -1
+
 typedef struct {
 	int row, col;
 	char value;
