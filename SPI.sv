@@ -52,7 +52,7 @@ module spi_board_slave(input logic sclk,
 					matrow <= matrow + 1;
 				end
 				if(matrow == N - 1 && matcol == N - 1) begin
-					numNotSpaces <= 0;
+					// numNotSpaces <= 0;
 					matrow <= 0;
 					matcol <= 0;
 					cnt <= 0;
