@@ -63,7 +63,7 @@ typedef struct
 
 #define KEYCHECK_INTERVAL_MICROS 100
 
-#define TICK_LENGTH_SECONDS 1.0
+#define TICK_LENGTH_SECONDS 0.4
 
 #define BONUS_PIECE_POTENTIAL_NEEDED 1
 
@@ -278,7 +278,6 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	digitalWrite(RESET, 1);
 	digitalWrite(LOAD, 1);
-	delayMicros(5);
 	spiSendReceive(JUNK_BYTE);
 	digitalWrite(RESET, 0);
 
@@ -322,10 +321,12 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 							piece[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
 							board[brow][bcol];
 					spiSendReceive(sendChar);
+					printf("%c", sendChar);
 					if(sendChar == ' ') numSpacesSent++;
 				}
 				else {
 					spiSendReceive(board[brow][bcol]);
+					printf("%c", board[brow][bcol]);
 					if(board[brow][bcol] == ' ') numSpacesSent++;
 				}
 			
@@ -336,31 +337,36 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			else if(isOnSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN, NEXT_PIECE_LED_ROW_END,
 							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
 				spiSendReceive('#');
+				printf("#");
 			}
 			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
 							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
 				char sendChar = nextPieceLED[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
 				spiSendReceive(sendChar);
+				printf("%c", sendChar);
 				if(sendChar == ' ') numSpacesSent++;
 				else nextCount++;
 			}
 			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
 							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
 				spiSendReceive('#');
+				printf("#");
 			}
 			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
 							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
 							bonusPiece -> pieceShape != NONEXISTENT) {
 				char sendChar = bonusPieceLED[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
 				spiSendReceive(sendChar);
+				printf("%c", sendChar);
 				if(sendChar == ' ') numSpacesSent++;
 			}
 			else {
 				spiSendReceive(' ');
+				printf(" ");
 				numSpacesSent++;
 			}
 		}
-		// printf("\n");
+		printf("\n");
 	}
 	digitalWrite(LOAD, 0);
 	printf("Next Count = %d\n", nextCount);
@@ -475,8 +481,9 @@ void main(void) {
 		// printf("BB\n");
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
-		bonusPiecePotential += rowsEliminatedOnTick;
-		if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED) {
+		bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
+		if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
+						bonusPiece.pieceShape == NONEXISTENT) {
 			newFallingPiece(&bonusPiece);
 		}
 
@@ -499,6 +506,7 @@ void main(void) {
 				fallingPiece = bonusPiece;
 				bonusPiece.pieceShape = NONEXISTENT;
 				useBonusPiece = false;
+				bonusPiecePotential = 0;
 			}
 			else {
 				fallingPiece = nextPiece;
@@ -539,7 +547,6 @@ void main2(void) {
 	int bonusPiecePotential = 0;
 
 	bool gameOver = false;
-	// bool useBonus = false;
 
 	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 
