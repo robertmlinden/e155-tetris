@@ -405,6 +405,11 @@ bool isInSquare(r, c, rbegin, rend, cbegin, cend) {
 	return r >= rbegin && r <= rend && c >= cbegin && c <= cend;
 }
 
+bool isOnSquare(r, c, rbegin, rend, cbegin, cend) {
+	return ((r == rbegin || r == rend) && (c >= cbegin && c <= cend) || 
+		(c == cbegin || c == cend) && (r >= rbegin && r <= rend));
+}
+
 void deleteRow(int rDeleted, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	int r, c;
  	for (r = rDeleted; r > 1; r--)

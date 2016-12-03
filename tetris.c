@@ -68,8 +68,19 @@ typedef struct
 #define BONUS_PIECE_POTENTIAL_NEEDED 1
 
 #define RESET 12
+#define LOAD 21
 
 #define N 32
+
+#define NEXT_PIECE_LED_ROW_BEGIN 0x15
+#define NEXT_PIECE_LED_ROW_END   0x1A
+#define NEXT_PIECE_LED_COL_BEGIN 0x15
+#define NEXT_PIECE_LED_COL_END   0x1A
+
+#define BONUS_PIECE_LED_ROW_BEGIN 0x15
+#define BONUS_PIECE_LED_ROW_END   0x1A
+#define BONUS_PIECE_LED_COL_BEGIN 0x08
+#define BONUS_PIECE_LED_COL_END   0x0D
 
 // Pointers that will be memory mapped when pioInit() is called
 volatile unsigned int *gpio; //pointer to base of gpio
@@ -263,17 +274,35 @@ void spiSendUpdatedPixel(char value, int row, int col) {
 	SPI0CSbits.TA = 0;
 }
 
-void sendBoardState(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
+			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	digitalWrite(RESET, 1);
+	digitalWrite(LOAD, 1);
 	delayMicros(5);
 	spiSendReceive(JUNK_BYTE);
 	digitalWrite(RESET, 0);
 
 	int numSpacesSent = 0;
 
+	// printf("GOT HERE\n");
+
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPiece(piece, fallingPiece);
 
+	// printf("GOT HERE 2\n");	
+
+	char nextPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	getPiece(nextPieceLED, nextPiece);
+
+	// printf("GOT HERE 3\n");
+
+	int nextCount = 0;	
+
+	char bonusPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	if(bonusPiece -> pieceShape != NONEXISTENT) {
+		getPiece(bonusPieceLED, bonusPiece);
+	}
+	
 	int lrow, lcol;
 	for(lrow = 0; lrow < N; lrow++) {
 		for(lcol = 0; lcol < N; lcol++) {
@@ -304,14 +333,37 @@ void sendBoardState(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_W
 				// printf("%c", board[brow][bcol]);
 				// printf("%d,", board[brow][bcol]);
 			}
+			else if(isOnSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN, NEXT_PIECE_LED_ROW_END,
+							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
+				spiSendReceive('#');
+			}
+			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
+							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
+				char sendChar = nextPieceLED[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
+				spiSendReceive(sendChar);
+				if(sendChar == ' ') numSpacesSent++;
+				else nextCount++;
+			}
+			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
+							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
+				spiSendReceive('#');
+			}
+			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
+							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
+							bonusPiece -> pieceShape != NONEXISTENT) {
+				char sendChar = bonusPieceLED[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
+				spiSendReceive(sendChar);
+				if(sendChar == ' ') numSpacesSent++;
+			}
 			else {
 				spiSendReceive(' ');
 				numSpacesSent++;
-				// printf("%d, ", ((int)(' ')));
 			}
 		}
 		// printf("\n");
 	}
+	digitalWrite(LOAD, 0);
+	printf("Next Count = %d\n", nextCount);
 	printf("Number of spaces sent: %d\n", numSpacesSent);
 }
 
@@ -340,22 +392,22 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 					switch(keyCode) {
 						case MOVE_LEFT:
 							move(fallingPiece, false, board);
-							sendBoardState(fallingPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case MOVE_RIGHT:
 							move(fallingPiece, true, board);
-							sendBoardState(fallingPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CCW:
 							rotate(fallingPiece, false, board);
-							sendBoardState(fallingPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CW:
 							rotate(fallingPiece, true, board);
-							sendBoardState(fallingPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case USE_BONUS:
@@ -382,11 +434,12 @@ void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
     delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board, score);
 }
 
-void main2(void) {
+void main(void) {
 	pioInit();
 	spi0Init();
 	timerInit();
 
+	digitalWrite(LOAD, 0);
 	digitalWrite(RESET, 0);
 
 	// Seed our random number generator
@@ -412,7 +465,7 @@ void main2(void) {
 
 	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 	// printf("GOT HERE\n");
-	sendBoardState(&fallingPiece, board);
+	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 
 	printf("BOARD STATE SENT!!\n");
 
@@ -428,7 +481,7 @@ void main2(void) {
 		}
 
 		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-		sendBoardState(&fallingPiece, board);
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 		printf("BOARD STATE SENT!!\n");
 
 		if(rowsEliminatedOnTick == -1) {
@@ -453,7 +506,7 @@ void main2(void) {
 			}
 
 			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-			sendBoardState(&fallingPiece, board);
+			sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 			printf("BOARD STATE SENT!!\n");
 		}
      	}
@@ -462,7 +515,7 @@ void main2(void) {
 	// free(changedPixels);
 }
 
-void main(void) {
+void main2(void) {
 	pioInit();
 	timerInit();
 	spi0Init();
