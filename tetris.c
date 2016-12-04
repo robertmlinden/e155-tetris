@@ -68,7 +68,7 @@ typedef struct
 #define BONUS_PIECE_POTENTIAL_NEEDED 1
 
 #define RESET 12
-#define LOAD 21
+#define LOAD 16
 
 #define N 32
 
@@ -243,9 +243,9 @@ bool isBoardSquare(int row, int col) {
 }
 
 void delayMicros(unsigned int micros) {
-	sys_timer[4] = sys_timer[1] + micros;
-	sys_timer[0] &= 0b0010;
-	while(!(sys_timer[0] & 0b0010));
+	sys_timer[3] = sys_timer[1] + micros;
+	sys_timer[0] &= 0b0001;
+	while(!(sys_timer[0] & 0b0001));
 }
 
 void delaySeconds(double seconds) {
@@ -259,9 +259,18 @@ void digitalWrite(int pin, int val) {
 	else GPCLR[reg] = 1 << offset;
 }
 
+int digitalRead(int pin) {
+    int reg = pin / 32;
+    int offset = pin % 32;
+
+    return (GPLEV[reg] >> offset) & 0x00000001;
+}
+
 char spiSendReceive(char byte) {
 	SPI0FIFO = byte;
-	while(!SPI0CSbits.DONE);
+	while(!SPI0CSbits.DONE) {
+		//printf("%d,", digitalRead(6));
+	}
 	// printf("%d,", SPI0FIFO);
 	return SPI0FIFO;
 }
@@ -276,26 +285,20 @@ void spiSendUpdatedPixel(char value, int row, int col) {
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-	digitalWrite(RESET, 1);
 	digitalWrite(LOAD, 1);
-	spiSendReceive(JUNK_BYTE);
-	digitalWrite(RESET, 0);
+	delayMicros(5);
+printf("YES: %d,", digitalRead(6));
 
 	int numSpacesSent = 0;
 
-	// printf("GOT HERE\n");
-
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(piece, fallingPiece);
-
-	// printf("GOT HERE 2\n");	
+	getPiece(piece, fallingPiece);	
 
 	char nextPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPiece(nextPieceLED, nextPiece);
 
-	// printf("GOT HERE 3\n");
-
-	int nextCount = 0;	
+	int nextCount = 0;
+	int sendCount = 0;
 
 	char bonusPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	if(bonusPiece -> pieceShape != NONEXISTENT) {
@@ -304,8 +307,8 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	
 	int lrow, lcol;
 	for(lrow = 0; lrow < N; lrow++) {
+printf("YES: %d,", digitalRead(6));
 		for(lcol = 0; lcol < N; lcol++) {
-			// printf("(%d, %d)\n", lrow, lcol);
 			int brow = lrow;
 			int bcol = lcol;
 			ledBoardToGameBoardCoords(&brow, &bcol);
@@ -320,14 +323,17 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 					char sendChar = (board[brow][bcol] == ' ') ? 
 							piece[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
 							board[brow][bcol];
+					if(sendChar != ' ') sendChar = 'F';
 					spiSendReceive(sendChar);
 					printf("%c", sendChar);
 					if(sendChar == ' ') numSpacesSent++;
+					sendCount++;
 				}
 				else {
 					spiSendReceive(board[brow][bcol]);
 					printf("%c", board[brow][bcol]);
 					if(board[brow][bcol] == ' ') numSpacesSent++;
+					sendCount++;
 				}
 			
 				// spiSendReceive(board[brow][bcol]);
@@ -338,6 +344,7 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
 				spiSendReceive('#');
 				printf("#");
+				sendCount++;
 			}
 			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
 							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
@@ -346,11 +353,13 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 				printf("%c", sendChar);
 				if(sendChar == ' ') numSpacesSent++;
 				else nextCount++;
+				sendCount++;
 			}
 			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
 							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
 				spiSendReceive('#');
 				printf("#");
+				sendCount++;
 			}
 			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
 							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
@@ -359,18 +368,24 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 				spiSendReceive(sendChar);
 				printf("%c", sendChar);
 				if(sendChar == ' ') numSpacesSent++;
+				sendCount++;
 			}
 			else {
 				spiSendReceive(' ');
 				printf(" ");
 				numSpacesSent++;
+				sendCount++;
 			}
 		}
 		printf("\n");
 	}
+	printf("YES: %d,", digitalRead(6));
 	digitalWrite(LOAD, 0);
 	printf("Next Count = %d\n", nextCount);
 	printf("Number of spaces sent: %d\n", numSpacesSent);
+	printf("Total number of characters sent: %d\n", sendCount);
+delayMicros(5000);
+printf("NO: %d,", digitalRead(6));
 }
 
 // THIS NEEDS TO BE CHANGED TO ALSO WATCH FOR KEY PRESSES
@@ -445,8 +460,11 @@ void main(void) {
 	spi0Init();
 	timerInit();
 
+	pinMode(6, INPUT);
+	pinMode(LOAD, OUTPUT);
+
 	digitalWrite(LOAD, 0);
-	digitalWrite(RESET, 0);
+	// digitalWrite(RESET, 1);
 
 	// Seed our random number generator
 	srand(time(NULL));
