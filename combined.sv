@@ -6,12 +6,15 @@ module TetrisFinal(input logic 	     clk, reset,
 						 output logic [3:0] cols,
 						 output logic [7:0] keyByte,
 						 output logic [3:0] keyPressed,
+						 output logic [4:0] sendCount,
+						 output logic [15:0] numNotSpaces,
 						 output logic clkOut,
 						 output logic sdo,
 						 output logic R0, G0, B0, R1, G1, B1,
 						 output logic [3:0] A,
 						 output logic lch,
-						 output logic blank);
+						 output logic blank,
+						 output logic boardOut);
 				 
 				 logic 		 slowclk;
 				 logic [3:0] key;
@@ -22,22 +25,158 @@ module TetrisFinal(input logic 	     clk, reset,
 				 logic [7:0] latched_board [N - 1:0][N - 1:0];
 				 logic led_idle;
 				 
+				 logic [7:0] fakeBoard [N - 1:0][N - 1:0];
+		
+				logic [11:0] cnt;
+				
+				always_ff @(posedge clk) begin
+					fakeBoard[cnt >> 5][cnt & 5'h1F] <= (cnt & 1) ? 8'd32 : 8'd35;
+					if(reset) cnt <= 0;
+					else cnt <= cnt + 1;
+				end
+				 
+				 logic [11:0] sCount;
+				 assign sendCount = sCount >> (11 - 4);
+				 
 				 clkdiv			clkdiv(clk, reset, slowclk);
 				 keypad			keypad(slowclk, reset, rows, cols, keyPressed);
 				 
 				 synchronizer	synchronizer(clk, reset, keyPressed, keyPressedC);
 				 synchronizer2 synchronizer2(clk, reset, keyPressed, keyPressedC, keyPressedS);
 				 
-				 led_matrix led_matrix(clk, latched_board, R0, G0, B0, R1, G1, B1, A, lch, blank, led_idle);
+				 led_matrix led_matrix(clk, board/*latched_board*/, R0, G0, B0, R1, G1, B1, A, lch, blank, led_idle);
 				 
 				 spi_slave		key_spi(sclk, cs, sdi, sdo, keyByte);
-				 spi_board_slave spi_board_slave(sclk, cs, sdi, load, board);
+				 spi_board_slave spi_board_slave(sclk, cs, sdi, load, board, numNotSpaces, sCount, boardOut, matrow, matcol);
 				 
 				 pad_and_latch_board_state palbs(sclk, ~load, led_idle, board, latched_board);
 				 
 				 assign keyByte[7] = (keyPressedS == 4'hD) ? 0 : 1;
 				 assign keyByte[6:0] = {3'b0, keyPressedS};
 				 assign clkOut = clk;
+endmodule
+
+module pad_and_latch_board_state(input logic sclk,
+											input logic board_spi_done,
+											input logic matrix_idle,
+											input logic [7:0] board [N-1:0][N-1:0],
+											output logic [7:0] latched_board [N-1:0][31:0]);
+
+		always_ff @(posedge sclk)
+			if(board_spi_done & matrix_idle) begin
+				latched_board <= board;
+			end
+											
+endmodule
+
+//module spi_board_slave(input logic sclk,
+//								input logic cs,
+//								input logic sdi,
+//								input logic load,
+//								output logic [7:0] board [N - 1:0][N - 1:0]);
+////								output logic [15:0] numNotSpaces,
+////								output logic [11:0] sendCount,
+////								output logic [7:0] boardOut,
+////								output logic [4:0] matrow,
+////								output logic [4:0] matcol);
+//
+//
+//		logic [4:0] matcol;
+//		logic [4:0] matrow;
+//		logic [2:0] cnt;
+//		logic [7:0] char;
+//
+//		always_ff@(posedge sclk)
+//			if(load) begin
+//				if (cnt < 4'd8) begin
+//					board[matrow][matcol] <= {board[matrow][matcol][6:0], sdi};
+//					char <= {char[6:0], sdi};
+//				end
+//			end
+//		
+////		always_ff@(negedge sclk) begin
+////			if(load) begin
+////				if (cnt < 4'd7) begin
+////					cnt <= cnt + 3'b1;
+////				end 
+////			end
+////		end
+//		
+//		always_ff@(negedge sclk) begin
+//			if (load) begin	
+//				if (cnt < 4'd7) begin
+//					cnt <= cnt + 3'b1;
+//				end else if (cnt == 4'd7) begin
+////					sendCount <= sendCount + 1; 
+////					if(board[matrow][matcol] == 8'd74) begin
+////						numNotSpaces <= numNotSpaces + 1;
+////					end
+//					if(matcol < N - 1) begin
+//						matcol <= matcol + 1;
+//					end else if (matcol == N - 1) begin
+//						matrow <= matrow + 1;
+//					end
+//					cnt <= 0;
+//				end
+////				if(matrow == 5'd0 && matcol == 5'd1) begin
+////					boardOut <= board[matrow][matcol];
+////				end
+//			end else if (~load) begin
+//				matrow <= 0;
+//				matcol <= 0;
+//			end
+//		end
+//		
+//endmodule
+
+module spi_board_slave(input logic sclk,
+								input logic cs,
+								input logic sdi,
+								input logic load,
+								output logic [7:0] board [N - 1:0][N - 1:0],
+								output logic [15:0] numNotSpaces,
+								output logic [11:0] sendCount,
+								output logic [7:0] boardOut,
+								output logic [4:0] matrow,
+								output logic [4:0] matcol);
+		
+		logic [2:0] cnt;
+		logic [7:0] char;
+
+		always_ff@(posedge sclk)
+			if(load) begin
+				if (cnt < 4'd8) begin
+					board[matrow][matcol] <= {board[matrow][matcol][6:0], sdi};
+					char <= {char[6:0], sdi};
+				end
+			end
+		
+		always_ff@(negedge sclk) begin
+			if(load) begin
+				if (cnt < 4'd7) begin
+					cnt <= cnt + 3'b1;
+				end else if (cnt == 4'd7) begin
+					sendCount <= sendCount + 1; 
+					if(board[matrow][matcol] == 8'd74) begin
+						numNotSpaces <= numNotSpaces + 1;
+					end
+					if(matcol < N - 1) begin
+						matcol <= matcol + 1;
+					end else if (matcol == N - 1) begin
+//						matcol <= 0;
+						matrow <= matrow + 1;
+					end
+					cnt <= 0;
+				end
+				if(matrow == 5'd0 && matcol == 5'd1) begin
+					boardOut <= board[matrow][matcol];
+				end
+			end begin
+				matrow <= 0;
+				matcol <= 0;
+			end
+		end
+		
 endmodule
 
 module keypad (input logic        slowclk, reset,
@@ -147,9 +286,9 @@ module led_matrix(input logic clk,
 		
 		always_ff@(posedge clk) begin
 			if (cycle_cnt == 0) begin 
-				col <= 6'b000000; 
+				col <= 13'd0; 
 			end else if ((&col) && (A < 4'd15)) begin 
-				col <= 6'b000000;
+				col <= 13'd0;
 			end else begin 
 				col <= col + 1;
 			end
@@ -170,7 +309,7 @@ module led_matrix(input logic clk,
 			if(~col[5]) begin
 				if (board[A][col] == 8'd32) begin
 					R0 <= 0;
-					G0 <= 0;
+					G0 <= 1;
 					B0 <= 0;
 				end else if(board[A][col] == 8'd35) begin
 					R0 <= 1;
@@ -183,12 +322,12 @@ module led_matrix(input logic clk,
 				end else begin
 					R1 <= board[A][col] & 1;
 					G1 <= (board[A][col] >> 1) & 1;
-					B1 <= (board[A][col] >> 2) & 1;
+					B1 <= |(board[A][col]);
 				end
 				
 				if (board[A + 5'd16][col] == 8'd32) begin
 					R1 <= 0;
-					G1 <= 0;
+					G1 <= 1;
 					B1 <= 0;
 				end else if(board[A + 5'd16][col] == 8'd35) begin
 					R1 <= 1;
@@ -201,7 +340,7 @@ module led_matrix(input logic clk,
 				end else begin
 					R1 <= board[A + 5'd16][col] & 1;
 					G1 <= (board[A + 5'd16][col] >> 1) & 1;
-					B1 <= (board[A + 5'd16][col] >> 2) & 1;
+					B1 <= |(board[A + 5'd16][col]);
 				end
 			end else begin
 				R0 <= 0;
@@ -225,59 +364,6 @@ module led_matrix(input logic clk,
 			end 
 		end
 		
-endmodule
-
-module spi_board_slave(input logic sclk,
-								input logic cs,
-								input logic sdi,
-								input logic load,
-								output logic [7:0] board [N - 1:0][N - 1:0]);
-		
-		logic [4:0] matrow, matcol;
-		
-		logic [2:0] cnt;
-		logic [7:0] char;
-
-		always_ff@(posedge sclk)
-			if(load) begin
-				if (cnt < 4'd8) begin
-					board[matrow][matcol] <= {board[matrow][matcol][6:0], sdi};
-					char <= {char[6:0], sdi};
-				end
-			end
-		
-		always_ff@(negedge sclk) begin
-			if(load) begin
-				if (cnt < 4'd7) begin
-					cnt <= cnt + 3'b1;
-				end else if (cnt == 4'd7) begin
-					if(matcol < N - 1) begin
-						matcol <= matcol + 1;
-					end else begin
-						matcol <= 0;
-						matrow <= matrow + 1;
-					end
-					cnt <= 0;
-				end
-			end begin
-				matrow <= 0;
-				matcol <= 0;
-			end
-		end
-		
-endmodule
-
-module pad_and_latch_board_state(input logic sclk,
-											input logic board_spi_done,
-											input logic matrix_idle,
-											input logic [7:0] board [N - 1:0][N - 1:0],
-											output logic [7:0] latched_board [N - 1:0][N - 1:0]);
-
-		always_ff @(posedge sclk)
-			if(board_spi_done & matrix_idle) begin
-				latched_board <= board;
-			end
-											
 endmodule
 
 module spi_slave (input logic sclk,
