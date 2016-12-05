@@ -38,6 +38,7 @@
 #define ROTATE_CCW 0x8
 #define ROTATE_CW 0x5
 #define USE_BONUS 0xB
+#define AGAIN 0xA
 
 volatile unsigned int *spi0; //pointer to base of spi0
 
@@ -67,7 +68,7 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 /////////////////////////////////////////////////////////////////////
 
 // The game tick length in seconds
-#define TICK_LENGTH_SECONDS 0.5
+#define TICK_LENGTH_SECONDS 0.05
 
 // The amount of rows that need to be eliminated since the last
 // use of a bonus piece (or the beginning of the game) before the user
@@ -400,16 +401,6 @@ bool isBoardSquare(int row, int col) {
 	return row >= 0 && row < BOARD_HEIGHT && col >= 0 && col < BOARD_WIDTH;
 }
 
-
-/*
- * Sends the game state via SPI to the FPGA
- * Also prints the LED board representation to terminal if the debugging variable
- * just below PRINT_LED_BOARD_REPRESENTATION is true
- */
-
-#define PRINT_LED_BOARD_REPRESENTATION false
-
-
 /*
  * Converts a character on the LED representation
  * To its corresponding color code on the LED board
@@ -418,9 +409,9 @@ char charToColor(char sendChar) {
 	switch(sendChar) {
 		case ' ':
 			return (char) 0;
+		/*
 		case '#':
 			return (char) 1;
-		/*
 		case 'F':
 		case 'N':
 		case 'B':
@@ -430,6 +421,7 @@ char charToColor(char sendChar) {
 		*/
 		default:
 			return (char) 1;
+		
 	}
 }
 
@@ -442,6 +434,15 @@ void getDigitChars(char digitChars[NUMBER_HEIGHT][NUMBER_WIDTH], int digit) {
 	memcpy(digitChars, NUMBERS[digit],
 		sizeof(char) * NUMBER_HEIGHT * NUMBER_WIDTH);
 }
+
+
+/*
+ * Sends the game state via SPI to the FPGA
+ * Also prints the LED board representation to terminal if the debugging variable
+ * just below PRINT_LED_BOARD_REPRESENTATION is true
+ */
+
+#define PRINT_LED_BOARD_REPRESENTATION true
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
@@ -637,7 +638,7 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
  * a meaningful byte of data back from the FPGA representing the key pressed.
  * The Pi then reads the key and updates the game state accordingly (see switch statement).
  */
-void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
+int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece, FallingPiece* bonusPiece,
 					char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
 	sys_timer[4] = sys_timer[1] + micros;
@@ -655,30 +656,40 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 					char keyCode = (keyByte & 0b1111);
 					switch(keyCode) {
 						case MOVE_LEFT:
-							move(fallingPiece, false, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-							displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							if(!gameOver) {
+								move(fallingPiece, false, board);
+								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
+								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							}
 							break;
 						case MOVE_RIGHT:
-							move(fallingPiece, true, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-							displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							if(!gameOver) {
+								move(fallingPiece, true, board);
+								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
+								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							}
 							break;
 						case ROTATE_CCW:
-							rotate(fallingPiece, false, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-							displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							if(!gameOver) {
+								rotate(fallingPiece, false, board);
+								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
+								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							}
 							break;
 						case ROTATE_CW:
-							rotate(fallingPiece, true, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-							displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							if(!gameOver) {
+								rotate(fallingPiece, true, board);
+								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
+								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+							}
 							break;
 						case USE_BONUS:
-							if(bonusPiece -> pieceShape != NONEXISTENT) {
+							if(bonusPiece -> pieceShape != NONEXISTENT && !gameOver) {
 								useBonusPiece = true;
 							}
 							break;
+						case AGAIN:
+							if(gameOver) return -3;
 					}
 				}
 				
@@ -690,6 +701,7 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 			sys_timer[0] &= 0b1000;
 		}
 	}
+	return 0;
 }
 
 /*
@@ -726,63 +738,71 @@ void main(void) {
 	// Those pieces of information are stored separately.
 	char board[BOARD_HEIGHT][BOARD_WIDTH];
 	
-	initBoard(board);
-	newFallingPiece(&fallingPiece);
-	newFallingPiece(&nextPiece);
-
-	// Setting pieceShape to NONEXISTENT signifies that the user does not
-	// currently have a bonus piece
-	bonusPiece.pieceShape = NONEXISTENT;
+	while(true) {
+		initBoard(board);
+		newFallingPiece(&fallingPiece);
+		newFallingPiece(&nextPiece);
 	
-	// Game score
-	int score = 0;
-
-	// The amount of rows the user has eliminated since the last bonus
-	// piece used (or since the beginning of the game). If this becomes at
-	// least as great as BONUS_PIECE_POTENTIAL_NEEDED, then the user
-	// is granted a bonus piece to use at will for their next turn
-	int bonusPiecePotential = 0;
-
-	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-
-	while(!gameOver) {
- 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
-
-		// Let gravity tick and check for the number of rows eliminated
- 		int rowsEliminatedOnTick = tick(&fallingPiece, board);
-
-		bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
-		if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
-						bonusPiece.pieceShape == NONEXISTENT) {
-			newFallingPiece(&bonusPiece);
-		}
-
-		if(rowsEliminatedOnTick == -1) {
-			gameOver = true;
-		}
-		else if(rowsEliminatedOnTick == -2) {
-			// This is not a piece transition, Nothing to do here
-		}
-		else {
-			score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
-
-			if(useBonusPiece) {
-				fallingPiece = bonusPiece;
-				bonusPiece.pieceShape = NONEXISTENT;
-				useBonusPiece = false;
-				bonusPiecePotential = 0;
-			}
-			else {
-				fallingPiece = nextPiece;
-				newFallingPiece(&nextPiece);
-			}
-		}
-
+		// Setting pieceShape to NONEXISTENT signifies that the user does not
+		// currently have a bonus piece
+		bonusPiece.pieceShape = NONEXISTENT;
+		
+		// Game score
+		int score = 0;
+	
+		// The amount of rows the user has eliminated since the last bonus
+		// piece used (or since the beginning of the game). If this becomes at
+		// least as great as BONUS_PIECE_POTENTIAL_NEEDED, then the user
+		// is granted a bonus piece to use at will for their next turn
+		int bonusPiecePotential = 0;
+	
 		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-     	}
-	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+	
+		while(!gameOver) {
+	 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
+	
+			// Let gravity tick and check for the number of rows eliminated
+	 		int rowsEliminatedOnTick = tick(&fallingPiece, board);
+	
+			bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
+			if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
+							bonusPiece.pieceShape == NONEXISTENT) {
+				newFallingPiece(&bonusPiece);
+			}
+	
+			if(rowsEliminatedOnTick == -1) {
+				gameOver = true;
+			}
+			else if(rowsEliminatedOnTick == -2) {
+				// This is not a piece transition, Nothing to do here
+			}
+			else {
+				score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
+	
+				if(useBonusPiece) {
+					fallingPiece = bonusPiece;
+					bonusPiece.pieceShape = NONEXISTENT;
+					useBonusPiece = false;
+					bonusPiecePotential = 0;
+				}
+				else {
+					fallingPiece = nextPiece;
+					newFallingPiece(&nextPiece);
+				}
+			}
+	
+			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+			sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+	     	}
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+
+		int playAgain;
+		do {
+			playAgain = delayMicrosAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
+		} while(playAgain != -3);
+		gameOver = false;
+	}
 }
 
 /////////////////////////////////////////////////////////////////////
