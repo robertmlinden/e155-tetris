@@ -28,6 +28,12 @@ typedef struct {
 #define NUM_ROTATIONS 4
 #define PIECE_BLOCK_SIZE 4
 
+// Game Constants ////////////////////////////////////////////////
+#define FAIL_TO_MOVE_OR_ROTATE -4
+#define PLAY_AGAIN -3
+#define PIECE_STILL_FALLING -2
+#define GAME_OVER -1
+
 // Miscellaneous ///////////////////////////////////////////////////
 
 typedef int bool;

@@ -33,14 +33,6 @@
 #define SPI_BASE 		(GPIO_BASE + 0x4000)
 #define BLOCK_SIZE              (4*1024)
 
-#define MOVE_LEFT 0x7
-#define MOVE_RIGHT 0x9
-#define ROTATE_CCW 0x8
-#define ROTATE_CW 0x5
-#define LEAD_DROP 0x0
-#define USE_BONUS 0xB
-#define AGAIN 0xA
-
 volatile unsigned int *spi0; //pointer to base of spi0
 
 // A struct to readably access relevant bits in the spi0 chip select register
@@ -92,24 +84,24 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 // The pixel coordinates of where the bonus piece bounding box will appear
 #define BONUS_PIECE_LED_ROW_BEGIN 0x15
 #define BONUS_PIECE_LED_ROW_END   0x1A
-#define BONUS_PIECE_LED_COL_BEGIN 0x08
-#define BONUS_PIECE_LED_COL_END   0x0D
+#define BONUS_PIECE_LED_COL_BEGIN 0x0D
+#define BONUS_PIECE_LED_COL_END   0x12
 
 // The pixel coordinates of where the bounding boxes for the three score digits will appear
 #define D0_ROW_BEGIN 0x1B
 #define D0_ROW_END   0x1D
-#define D0_COL_BEGIN 0x01
-#define D0_COL_END   0x05
+#define D0_COL_BEGIN 0x05
+#define D0_COL_END   0x09
 
 #define D1_ROW_BEGIN 0x17
 #define D1_ROW_END   0x19
-#define D1_COL_BEGIN 0x01
-#define D1_COL_END   0x05
+#define D1_COL_BEGIN 0x05
+#define D1_COL_END   0x09
 
 #define D2_ROW_BEGIN 0x13
 #define D2_ROW_END   0x15
-#define D2_COL_BEGIN 0x01
-#define D2_COL_END   0x05
+#define D2_COL_BEGIN 0x05
+#define D2_COL_END   0x09
 
 #define JUNK_BYTE	   0b00000000
 
@@ -123,13 +115,21 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 const unsigned int CLK_FREQ = 1200000000;
 
 /////////////////////////////////////////////////////////////////////
-// Global Game Variables
+// Global Game Variables and Constants
 /////////////////////////////////////////////////////////////////////
 bool acceptNewKeystroke = true;
 bool useBonusPiece = false;
 bool gameOver = false;
 int bonusPiecePotential = 0;
 int score = 0;
+
+#define MOVE_LEFT 0x7
+#define MOVE_RIGHT 0x9
+#define ROTATE_CCW 0x8
+#define ROTATE_CW 0x5
+#define LEAD_DROP 0x0
+#define USE_BONUS 0xB
+#define AGAIN 0xA
 
 /////////////////////////////////////////////////////////////////////
 // GPIO, SPI0, and SYS_TIMER FUNCTIONS (taken from easyPIO.h)
@@ -652,7 +652,7 @@ void processTick(FallingPiece* fallingPiece,
 	if(rowsEliminatedOnTick == -1) {
 		gameOver = true;
 	}
-	else if(rowsEliminatedOnTick == -2 || rowsEliminatedOnTick == -4) {
+	else if(rowsEliminatedOnTick == PIECE_STILL_FALLING || rowsEliminatedOnTick == FAIL_TO_MOVE_OR_ROTATE) {
 		// This is not a piece transition, Nothing to do here
 	}
 	else {
@@ -697,7 +697,7 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 	int result;
 
 	while(!(sys_timer[0] & 0b0010)) {
-		result = -2;
+		result = PIECE_STILL_FALLING;
 		if(sys_timer[0] & 0b1000) {
 			char keyByte = spiSendReceive(JUNK_BYTE);
 			if(keyByte >> 7) {
@@ -740,8 +740,8 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 							break;
 						case LEAD_DROP:
 							if(!gameOver) {
-								result = -2;
-								while(result == -2) {
+								result = PIECE_STILL_FALLING;
+								while(result == PIECE_STILL_FALLING) {
 									result = tick(fallingPiece, board);
 								}
 								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
@@ -749,7 +749,7 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 							break;
 				
 						case AGAIN:
-							if(gameOver) return -3;
+							if(gameOver) return PLAY_AGAIN;
 					}
 				}
 				
@@ -829,7 +829,7 @@ void main(void) {
 
 			printf("Before: %d", rowsEliminatedOnTick);
 			// Let gravity tick and check for the number of rows eliminated
-			if(rowsEliminatedOnTick != -1) {
+			if(rowsEliminatedOnTick != GAME_OVER) {
 				rowsEliminatedOnTick = tick(&fallingPiece, board);
 				printf("After: %d", rowsEliminatedOnTick);
 		
@@ -841,7 +841,7 @@ void main(void) {
 		int playAgain;
 		do {
 			playAgain = delayMicrosAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board);
-		} while(playAgain != -3);
+		} while(playAgain != PLAY_AGAIN);
 		gameOver = false;
 	}
 }

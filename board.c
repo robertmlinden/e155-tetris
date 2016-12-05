@@ -315,7 +315,7 @@ int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
 				if(!continueGame) {
 					printf("DON'T CONTINUE\n");
-					return -1;
+					return GAME_OVER;
 				}
 				int scoreAddition = lineCheck(board);				
 
@@ -323,7 +323,7 @@ int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][
 			}
 		}
 	}
-	return -2;
+	return PIECE_STILL_FALLING;
 }
 
 
@@ -342,7 +342,8 @@ bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][B
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterMove = r + fallingPiece->r;
 			int boardCAfterMove = c + fallingPiece->c + h_offset;
-			if(boardRAfterMove > 0 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') {
+			if((boardRAfterMove > 0 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') ||
+				(boardCAfterMove <= 0 || boardCAfterMove >= BOARD_WIDTH - 1 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ')) {
 				return -4;
 			}
 		}
@@ -384,7 +385,7 @@ bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_H
 				else {
 					fallingPiece -> rotation = (fallingPiece -> rotation + 1) % 4;
 				}
-				return -4;
+				return FAIL_TO_MOVE_OR_ROTATE;
 			}
 		}
 	}
