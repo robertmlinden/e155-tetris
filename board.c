@@ -297,6 +297,10 @@ int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	return checkForSolidification(fallingPiece, board);
 }
 
+/*
+ * Checks to see if the falling piece is currently just above another
+ * piece or the floor, which would trigger a sticky landing
+ */
 int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	char fallingPieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPieceChars(fallingPieceChars, fallingPiece);	

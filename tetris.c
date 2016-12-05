@@ -37,6 +37,7 @@
 #define MOVE_RIGHT 0x9
 #define ROTATE_CCW 0x8
 #define ROTATE_CW 0x5
+#define LEAD_DROP 0x0
 #define USE_BONUS 0xB
 #define AGAIN 0xA
 
@@ -445,6 +446,7 @@ void getDigitChars(char digitChars[NUMBER_HEIGHT][NUMBER_WIDTH], int digit) {
  */
 
 #define PRINT_LED_BOARD_REPRESENTATION true
+#define PRINT_GAME_STATE_SIMULATION true
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
@@ -632,6 +634,11 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	digitalWrite(LOAD_PIN, 0);
 }
 
+/*
+ * After a piece is moved, rotated, or affected by gravity,
+ * we must check the game state to see if the game is lost
+ * or rows have been eliminated
+ */
 void processTick(FallingPiece* fallingPiece,
 		FallingPiece* nextPiece, FallingPiece* bonusPiece,
 		char board[BOARD_HEIGHT][BOARD_WIDTH], int rowsEliminatedOnTick) {
@@ -664,7 +671,9 @@ void processTick(FallingPiece* fallingPiece,
 		}
 	}
 
-	displays(fallingPiece, nextPiece, bonusPiece, board);
+	if(PRINT_GAME_STATE_SIMULATION) {
+		displays(fallingPiece, nextPiece, bonusPiece, board);
+	}
 	sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
 }
 
@@ -699,7 +708,6 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 						case MOVE_LEFT:
 							if(!gameOver) {
 								result = move(fallingPiece, false, board);
-								printf("MOVE LEFT: %d\n", result);
 								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
 								if(gameOver) return -1;
 							}
@@ -730,6 +738,16 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 								useBonusPiece = true;
 							}
 							break;
+						case LEAD_DROP:
+							if(!gameOver) {
+								result = -2;
+								while(result == -2) {
+									result = tick(fallingPiece, board);
+								}
+								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
+							}
+							break;
+				
 						case AGAIN:
 							if(gameOver) return -3;
 					}
@@ -756,6 +774,9 @@ int delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
     return delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board);
 }
 
+/*
+ * Squaring scoring function
+ */
 int scoreIncreaseFromRowsEliminated(int rowsEliminated) {
 	return rowsEliminated * rowsEliminated;
 }
@@ -797,10 +818,13 @@ void main(void) {
 		// is granted a bonus piece to use at will for their next turn
 		bonusPiecePotential = 0;
 	
-		displays(&fallingPiece, &nextPiece, &bonusPiece, board);
+		if(PRINT_GAME_STATE_SIMULATION) {
+			displays(&fallingPiece, &nextPiece, &bonusPiece, board);
+		}
 		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 	
 		while(!gameOver) {
+			// We only care about this result if it's GAME OVER
 	 		int rowsEliminatedOnTick = delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board);
 
 			printf("Before: %d", rowsEliminatedOnTick);
