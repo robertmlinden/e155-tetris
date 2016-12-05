@@ -272,6 +272,7 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][B
 			int boardR = r + fallingPiece->r;
 			int boardC = c + fallingPiece->c;
 			if(fallingPieceChars[r][c] != ' ') {
+				printf("(%d, %d)\n", boardR, boardC); 
 				if(boardR <= 1) {
 					return false;
 				}
@@ -305,10 +306,11 @@ int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][
 		for(c = 0; c < PIECE_BLOCK_SIZE; c++) {
 			int boardRAfterTick = r + fallingPiece->r;
 			int boardCAfterTick = c + fallingPiece->c;
-			if(fallingPieceChars[r][c] != ' ' && board[boardRAfterTick + 1][boardCAfterTick] != ' ') {
+			if(fallingPieceChars[r][c] != ' ' && board[boardRAfterTick + 1][boardCAfterTick] != ' ' && boardRAfterTick > 0) {
 				// The piece needs to stop falling here
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
 				if(!continueGame) {
+					printf("DON'T CONTINUE\n");
 					return -1;
 				}
 				int scoreAddition = lineCheck(board);				
@@ -337,14 +339,14 @@ bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][B
 			int boardRAfterMove = r + fallingPiece->r;
 			int boardCAfterMove = c + fallingPiece->c + h_offset;
 			if(boardRAfterMove > 0 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') {
-				return false;
+				return -4;
 			}
 		}
 	}
 
 	// The move was valid!
 	fallingPiece -> c += h_offset;
-	return true;
+	return checkForSolidification(fallingPiece, board);
 }
 
 
@@ -378,13 +380,13 @@ bool rotate(FallingPiece* fallingPiece, bool rotateClockwise, char board[BOARD_H
 				else {
 					fallingPiece -> rotation = (fallingPiece -> rotation + 1) % 4;
 				}
-				return false;
+				return -4;
 			}
 		}
 	}
 
 	// The rotation was valid!
-	return true;
+	return checkForSolidification(fallingPiece, board);
 }
 
 

@@ -68,7 +68,7 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 /////////////////////////////////////////////////////////////////////
 
 // The game tick length in seconds
-#define TICK_LENGTH_SECONDS 0.05
+#define TICK_LENGTH_SECONDS 0.5
 
 // The amount of rows that need to be eliminated since the last
 // use of a bonus piece (or the beginning of the game) before the user
@@ -127,6 +127,8 @@ const unsigned int CLK_FREQ = 1200000000;
 bool acceptNewKeystroke = true;
 bool useBonusPiece = false;
 bool gameOver = false;
+int bonusPiecePotential = 0;
+int score = 0;
 
 /////////////////////////////////////////////////////////////////////
 // GPIO, SPI0, and SYS_TIMER FUNCTIONS (taken from easyPIO.h)
@@ -445,7 +447,7 @@ void getDigitChars(char digitChars[NUMBER_HEIGHT][NUMBER_WIDTH], int digit) {
 #define PRINT_LED_BOARD_REPRESENTATION true
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
-			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
+			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 
 	// Send a junk byte to the FPGA for reset purposes
 	// This is the only byte sent over while LOAD_PIN is low
@@ -630,6 +632,42 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	digitalWrite(LOAD_PIN, 0);
 }
 
+void processTick(FallingPiece* fallingPiece,
+		FallingPiece* nextPiece, FallingPiece* bonusPiece,
+		char board[BOARD_HEIGHT][BOARD_WIDTH], int rowsEliminatedOnTick) {
+
+	bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
+	if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
+					bonusPiece->pieceShape == NONEXISTENT) {
+		newFallingPiece(bonusPiece);
+	}
+
+	if(rowsEliminatedOnTick == -1) {
+		gameOver = true;
+	}
+	else if(rowsEliminatedOnTick == -2 || rowsEliminatedOnTick == -4) {
+		// This is not a piece transition, Nothing to do here
+	}
+	else {
+		printf("Rows Eliminated: %d\n", rowsEliminatedOnTick);
+		score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
+
+		if(useBonusPiece) {
+			*fallingPiece = *bonusPiece;
+			bonusPiece->pieceShape = NONEXISTENT;
+			useBonusPiece = false;
+			bonusPiecePotential = 0;
+		}
+		else {
+			*fallingPiece = *nextPiece;
+			newFallingPiece(nextPiece);
+		}
+	}
+
+	displays(fallingPiece, nextPiece, bonusPiece, board);
+	sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
+}
+
 /*
  * This function drives game ticks by running a while loop for TICK_LENGTH_SECONDS seconds.
  * In order for key presses to be registered, there must be code within the while loop that
@@ -640,14 +678,17 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
  */
 int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece, FallingPiece* bonusPiece,
-					char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
+					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	sys_timer[4] = sys_timer[1] + micros;
 	sys_timer[0] &= 0b0010;
 
 	sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
 	sys_timer[0] &= 0b1000;
 
+	int result;
+
 	while(!(sys_timer[0] & 0b0010)) {
+		result = -2;
 		if(sys_timer[0] & 0b1000) {
 			char keyByte = spiSendReceive(JUNK_BYTE);
 			if(keyByte >> 7) {
@@ -657,30 +698,31 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 					switch(keyCode) {
 						case MOVE_LEFT:
 							if(!gameOver) {
-								move(fallingPiece, false, board);
-								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+								result = move(fallingPiece, false, board);
+								printf("MOVE LEFT: %d\n", result);
+								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
+								if(gameOver) return -1;
 							}
 							break;
 						case MOVE_RIGHT:
 							if(!gameOver) {
-								move(fallingPiece, true, board);
-								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+								result = move(fallingPiece, true, board);
+								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
+								if(gameOver) return -1;
 							}
 							break;
 						case ROTATE_CCW:
 							if(!gameOver) {
-								rotate(fallingPiece, false, board);
-								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+								result = rotate(fallingPiece, false, board);
+								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
+								if(gameOver) return -1;
 							}
 							break;
 						case ROTATE_CW:
 							if(!gameOver) {
-								rotate(fallingPiece, true, board);
-								sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
-								displays(fallingPiece, nextPiece, bonusPiece, board, score);
+								result = rotate(fallingPiece, true, board);
+								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
+								if(gameOver) return -1;
 							}
 							break;
 						case USE_BONUS:
@@ -701,18 +743,17 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 			sys_timer[0] &= 0b1000;
 		}
 	}
-	return 0;
+	return result;
 }
 
 /*
  * Delegates work to delayMicrosAndWaitForKeyPress()
  */
-void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
+int delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece,
 					FallingPiece* bonusPiece,
-					char board[BOARD_HEIGHT][BOARD_WIDTH],
-					int score) {
-    delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board, score);
+					char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+    return delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board);
 }
 
 int scoreIncreaseFromRowsEliminated(int rowsEliminated) {
@@ -748,58 +789,34 @@ void main(void) {
 		bonusPiece.pieceShape = NONEXISTENT;
 		
 		// Game score
-		int score = 0;
+		score = 0;
 	
 		// The amount of rows the user has eliminated since the last bonus
 		// piece used (or since the beginning of the game). If this becomes at
 		// least as great as BONUS_PIECE_POTENTIAL_NEEDED, then the user
 		// is granted a bonus piece to use at will for their next turn
-		int bonusPiecePotential = 0;
+		bonusPiecePotential = 0;
 	
-		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+		displays(&fallingPiece, &nextPiece, &bonusPiece, board);
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 	
 		while(!gameOver) {
-	 		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
-	
+	 		int rowsEliminatedOnTick = delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board);
+
+			printf("Before: %d", rowsEliminatedOnTick);
 			// Let gravity tick and check for the number of rows eliminated
-	 		int rowsEliminatedOnTick = tick(&fallingPiece, board);
-	
-			bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
-			if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
-							bonusPiece.pieceShape == NONEXISTENT) {
-				newFallingPiece(&bonusPiece);
+			if(rowsEliminatedOnTick != -1) {
+				rowsEliminatedOnTick = tick(&fallingPiece, board);
+				printf("After: %d", rowsEliminatedOnTick);
+		
+				processTick(&fallingPiece, &nextPiece, &bonusPiece, board, rowsEliminatedOnTick);
 			}
-	
-			if(rowsEliminatedOnTick == -1) {
-				gameOver = true;
-			}
-			else if(rowsEliminatedOnTick == -2) {
-				// This is not a piece transition, Nothing to do here
-			}
-			else {
-				score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
-	
-				if(useBonusPiece) {
-					fallingPiece = bonusPiece;
-					bonusPiece.pieceShape = NONEXISTENT;
-					useBonusPiece = false;
-					bonusPiecePotential = 0;
-				}
-				else {
-					fallingPiece = nextPiece;
-					newFallingPiece(&nextPiece);
-				}
-			}
-	
-			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-			sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 	     	}
-		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 
 		int playAgain;
 		do {
-			playAgain = delayMicrosAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
+			playAgain = delayMicrosAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board);
 		} while(playAgain != -3);
 		gameOver = false;
 	}
