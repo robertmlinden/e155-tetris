@@ -356,6 +356,9 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	printf("%d\n", sys_timer[1]);
 	// delayMicros(5);
 	printf("YES: %d,", digitalRead(6));
+	digitalWrite(LOAD, 1);
+	delayMicros(5);
+printf("YES: %d,", digitalRead(6));
 
 	// char led_board[N][N];
 
@@ -363,6 +366,8 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 
 	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPiece(piece, fallingPiece);
+	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	getPiece(piece, fallingPiece);	
 
 	char nextPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPiece(nextPieceLED, nextPiece);
@@ -492,7 +497,6 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	spiSendReceive(JUNK_BYTE);
 	digitalWrite(LOAD, 1);
 	delayMicros(5);
-	printf("YES: %d,", digitalRead(6));
 
 	int numSpacesSent = 0;
 
@@ -513,7 +517,6 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	int lrow, lcol;
 
 	for(lrow = 0; lrow < N; lrow++) {
-		printf("YES: %d,", digitalRead(6));
 		for(lcol = 0; lcol < N; lcol++) {
 			int brow = lrow;
 			int bcol = lcol;
@@ -535,6 +538,7 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 					if(sendChar != ' ') sendChar = 'F';
 					// spiSendReceive(sendChar);
 					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+					// spiSendReceive(sendChar);
 					printf("%c", sendChar);
 					if(sendChar == ' ') numSpacesSent++;
 					sendCount++;
@@ -545,6 +549,9 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
 					printf("%c", sendChar);
 					if(sendChar == ' ') numSpacesSent++;
+					// spiSendReceive(board[brow][bcol]);
+					// printf("%c", board[brow][bcol]);
+					if(board[brow][bcol] == ' ') numSpacesSent++;
 					sendCount++;
 				}
 			
@@ -599,7 +606,6 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 		}
 		printf("\n");
 	}
-
 	printf("YES: %d,", digitalRead(6));
 	digitalWrite(LOAD, 0);
 	printf("Next Count = %d\n", nextCount);
@@ -679,13 +685,14 @@ void main(void) {
 	pioInit();
 	spi0Init();
 	timerInit();
-
 	deadline.tv_sec = 0;
 
 	pinMode(6, INPUT);
 	pinMode(LOAD, OUTPUT);
 	pinMode(SCLK, OUTPUT);
 	pinMode(MOSI, OUTPUT);
+	pinMode(6, INPUT);
+	pinMode(LOAD, OUTPUT);
 
 	digitalWrite(LOAD, 0);
 	// digitalWrite(RESET, 1);
