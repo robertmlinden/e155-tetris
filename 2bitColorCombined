@@ -1,0 +1,380 @@
+/*
+This code was made and developed by Robert Linden and Paul Slaats as a part
+of E155 for their Final Project.  The purpose of this code is to implement 
+Tetris on an LED Matrix connected to a Mudd Pi IV, on which this SystemVerilog
+was meant to be used.
+
+This Project was completed on December 4th, 2016
+*/
+
+parameter N = 32;
+
+module TetrisFinal(input logic 		   clk, reset,						// CLK is the System Clock for the FPGA. Reset is amanual Pin set to reset the system if need be. 
+						 input logic 		   sclk, cs, sdi, load,			// SCLK, CS, SDI, and LOAD are all signals driven by the Pi as a means to communicate via SPI.
+						 input logic  [3:0]  rows,								// rows is the input used by the Keypad Matrix to determine keystrokes mades by the player.
+						 output logic [3:0]  cols,								// cols is the output used by the Keypad to determine keystrokes made by the player
+						 output logic [7:0]  keyByte,							// keyByte was an output used as a part of the SPI code to check that signals sent to the Pi corresponded to the keystrokes.
+						 output logic [3:0]  keyPressed,						// keyPressed was an output used to debug the keypad section of the code by sending the latest key registered to the LED strip.
+						 output logic [4:0]  sendCount,						// sendCount was an output of the SPI_board_slave code used to debug the number of bits sent by the Pi.
+						 output logic [15:0] numNotSpaces,					// numNotSpaces was another output used to debug the SPI_board_slave code by outputting the number of instances of any particular SPI byte.
+						 output logic        clkOut,							// clkOut was a means of reproducing another clock with the same frequency as the onboard clock of the FPGA.
+						 output logic 			sdo,								// SDO is a part of the SPI communication sending data back to the Pi from the fpga.
+						 output logic 			R0, G0, B0, R1, G1, B1,		// RGB0 and RGB1 are outputs being sent to the LED Matrix.  These Drive each of the individual rows RGB values.
+						 output logic [3:0]  A,									// A is an output from the FPGA to the LED Matrix.  A controls the row multiplexing occuring on the FPGA board to ensur
+						 output logic 			lch,								// Latch or Lch as it is referred to is an output to the LED Matrix that sets the Matrix to the RGB values at any given time when Lch is set high. 
+						 output logic 			blank,							// Blank is an output to the LED matrix from the FPGA that sets the screen blank.  Lch can only occur when Blank is set high.
+						 output logic 			boardOut,						// boardOut was an output to debug SPI_board_slave.
+						 output logic [4:0]  matrow,							// matrow is the matrix row that we are currently sending bits to it is tracked internally but made an output as ameans to debug the system.
+						 output logic [4:0]  matcol);							// matcol is the matrix col that we are currently sending bits to it is tracked internally but made an output as ameans to debug the system.
+				 
+				 logic 		 slowclk;
+				 logic [3:0] key;													// Key is the key that was most recently pressed.
+				 logic [3:0] keyPressedC;										// KeyPressedC (Check) is the intermediate value used to made sure the input from the asynchronous keypad is synchronous.
+				 logic [3:0] keyPressedS;										// KeyPressedS (Synchronous) is the value output from the keypad synchronizer modules this output is synchronous to the FPGA.
+				 logic [1:0] board [N - 1:0][N - 1:0];								// board was our grouping of shift registers used to keep track of the most recent board state.
+				 logic led_idle;													// led_idle is a signal sent to signify the board leds are no longer being updated.
+				 logic [1:0] fakeBoard [N - 1:0][N - 1:0];						// fakeBoard is a board that we generated to test our LED matrix and debug our code.
+				 logic [11:0] cnt;												// cnt is the logic for a counter to generate a fake board.
+				 logic [11:0] sCount;											// sCount was an output of the SPI_board_slave code used to debug the number of bits sent by the Pi.
+				 logic [1:0] latched_board [N - 1:0][N - 1:0];
+				
+				// This block of logic is used to fill the fakeBoard to check that the LED Matrix is working
+				
+				always_ff @(posedge clk) begin
+					fakeBoard[cnt >> 5][cnt & 5'h1F] <= (cnt & 1) ? 3'b100 : 3'b001;
+					if(reset) cnt <= 0;
+					else cnt <= cnt + 1;
+				end
+				
+				// below are the instances of each module used in the System Verilog code.
+				 
+				 clkdiv				clkdiv(clk, reset, slowclk);																			
+				 keypad				keypad(slowclk, reset, rows, cols, keyPressed);
+				 synchronizer		synchronizer(clk, reset, keyPressed, keyPressedC);
+				 synchronizer2 	synchronizer2(clk, reset, keyPressed, keyPressedC, keyPressedS);
+				 
+				 led_matrix 					led_matrix(clk, latched_board, R0, G0, B0, R1, G1, B1, A, lch, blank, led_idle);
+				 spi_slave						key_spi(sclk, cs, sdi, sdo, keyByte);
+				 spi_board_slave 				spi_board_slave(sclk, cs, sdi, load, board, numNotSpaces, sCount, boardOut, matrow, matcol);
+				 pad_and_latch_board_state palbs(sclk, ~load, led_idle, board, latched_board);
+				 
+				 assign sendCount = sCount >> (11 - 4);
+				 assign keyByte[7] = (keyPressedS == 4'hD) ? 0 : 1;
+				 assign keyByte[6:0] = {3'b0, keyPressedS};
+				 assign clkOut = clk;
+endmodule
+
+// Clkdiv is a module used to output a slowclk on which we can run
+// the keypad at a frequency that will appropriatley register keystrokes.
+
+module clkdiv(input  logic 	clk, reset,
+				  output logic 	slowclk);
+				  
+		logic [13:0] count;
+		
+// Counter used to output slowclk with a particular frequency.
+		
+		always_ff@(posedge clk or posedge reset)
+			if (reset) count <= 0;
+			else count <= count + 1;
+		assign slowclk = count[13];
+endmodule
+
+// Keypad is a module used to register changes in voltage in the rows 
+// and cols to determine whether or not a key has been pressed and then
+// output the particular asynchronous keystroke that was registered.
+
+module keypad (input logic        slowclk, reset,
+					input logic  [3:0] rows,
+					output logic [3:0] cols,
+					output logic [3:0] keyPressed);
+					
+					logic 		state;
+					logic [3:0] key;
+					
+// Logic for updating the changes in row and coloumn when a keystroke
+// occurs and for outputting the different cases of each
+// and setting the corresponding key equal to the case that occurs.
+					
+		always_ff@(posedge slowclk)
+			if(~(|rows)) begin
+				state <= 0;
+				keyPressed <= 4'hD;
+				case(cols)
+					4'b1000: cols <= 4'b0100;
+					4'b0100: cols <= 4'b0010;
+					4'b0010: cols <= 4'b0001;
+					4'b0001: cols <= 4'b1000;
+					default: cols <= 4'b1000;
+				endcase
+			end else if(~state) begin
+				state <= 1;
+				keyPressed <= key;
+			end
+			
+			always_comb
+				case({rows,cols})
+					8'b1000_1000: key <= 4'hD;
+					8'b0100_1000: key <= 4'hC;
+					8'b0010_1000: key <= 4'hB;
+					8'b0001_1000: key <= 4'hA;
+					8'b1000_0100: key <= 4'hF;
+					8'b0100_0100: key <= 4'h9;
+					8'b0010_0100: key <= 4'h6;
+					8'b0001_0100: key <= 4'h3;
+					8'b1000_0010: key <= 4'h0;
+					8'b0100_0010: key <= 4'h8;
+					8'b0010_0010: key <= 4'h5;
+					8'b0001_0010: key <= 4'h2;
+					8'b1000_0001: key <= 4'hE;
+					8'b0100_0001: key <= 4'h7;
+					8'b0010_0001: key <= 4'h4;
+					8'b0001_0001: key <= 4'h1;
+					default: key <= 4'h2;
+				endcase
+				
+endmodule
+
+// This is the first synchronizer module, this will pass keyPressed
+// through a D Flip Flop and then set it to keyPressedC.
+
+module synchronizer(input logic  clk, reset,
+						  input logic  [3:0] keyPressed,
+						  output logic [3:0] keyPressedC);
+
+					always@(posedge clk or posedge reset)
+						if (reset) begin 
+							keyPressedC <= 0;
+						end else begin
+							keyPressedC <= keyPressed;
+						end
+						
+endmodule
+
+// This is the second syncronizer module, this will pass
+// keyPressedC through a D Flip Flop and check it against keyPressed,
+// this will allow for the output keyPressedS to be syncronous and
+// remove the influence of asynchronous inputs.
+
+module synchronizer2(input logic  clk, reset,
+						   input logic  [3:0] keyPressed,
+							input logic  [3:0] keyPressedC,
+						   output logic [3:0] keyPressedS);
+							
+					always@(posedge clk or posedge reset)
+						if (reset) begin 
+							keyPressedS <= 4'hD;
+						end else if (keyPressed == keyPressedC) begin
+							keyPressedS <= keyPressedC;
+						end else begin
+							keyPressedS <= 4'hD;
+						end
+						
+endmodule
+
+// LED Matrix is the module used for interpretting the board
+// state coming into the FPGA via SPI and outputting the correct
+// digital pins to the LED Matrix.  This includes outputs to RGB0, RGB1, Latch
+// and Blank.   There are several blocks of logic within this module.
+
+module led_matrix(input logic  clk,
+						input logic  [1:0] board [N - 1:0][N - 1:0],
+						output logic R0, G0, B0, R1, G1, B1,
+						output logic [3:0] A,
+						output logic lch,
+						output logic blank,
+						output logic idle);
+		
+		logic [13:0] col;
+		logic [17:0] cycle_cnt;
+		
+// This is a basic counter to keep track of the total number of cycles through A
+		
+		always_ff @(posedge clk) begin
+			cycle_cnt <= cycle_cnt + 1;
+		end
+		
+// This logic checks the counter above and initiates another counter that will be 
+// used to cycle through the different rows of A.
+		
+		always_ff@(posedge clk) begin
+			if (cycle_cnt == 0) begin 
+				col <= 13'd0; 
+			end else if ((&col) && (A < 4'd15)) begin 
+				col <= 13'd0;
+			end else begin 
+				col <= col + 1;
+			end
+		end
+		
+// This logic will rotate through the different rows by checking the state of the counter above,
+// and then setting idle to high whenever the counter has run through all rows.
+		
+		always_ff @(posedge clk) begin
+			if (cycle_cnt == 0) begin
+				A <= 4'b0000;
+				idle <= 0;
+			end else if ((&col) && (A < 4'd15)) begin
+				A <= A + 1;
+			end else if ((&col) && (A == 4'd15)) begin
+				idle <= 1;
+			end 
+		end
+		
+// This logic is used to interpret the data from the board andsend
+// the correct RGB commands to the LED Matrix for both the top and
+// bottom 16 rows.
+		
+		always_ff@(posedge clk) begin
+			if(~col[5]) begin
+				if (board[A][col] == 2'b00) begin
+				R0 <= 0;
+				G0 <= 0;
+				B0 <= 0;
+				end else if (board[A][col] == 2'b01) begin
+				R0 <= 1;
+				G0 <= 1;
+				B0 <= 1;
+				end else if (board[A][col] == 2'b10) begin
+				R0 <= 1;
+				G0 <= 0;
+				B0 <= 0;
+				end
+				if ((board[A + 5'd16][col] == 2'b00)) begin
+				R1 <= 0;
+				G1 <= 0;
+				B1 <= 0;
+				end else if ((board[A + 5'd16][col] == 2'b01)) begin
+				R1 <= 1;
+				G1 <= 1;
+				B1 <= 1;
+				end else if ((board[A + 5'd16][col] == 2'b10)) begin
+				R1 <= 1;
+				G1 <= 0;
+				B1 <= 0;
+				end
+		end
+	end
+		
+// This block of logic is used to set latch and
+// blank so that the LED matrix can be updated.  This is done 
+// in the second half of the timer and is dictated such
+// that latch and blank are set high then latch is set low
+// followed one clock cycle later by blank being set low.  
+			
+		always_ff@(negedge clk) begin
+			if(col == 6'd31) begin
+				blank <= 1;
+				lch <= 1;
+			end else if(col == 6'd32) begin
+				lch <= 0;
+			end else if(col == 6'd33) begin
+				blank <= 0;
+			end 
+		end
+		
+endmodule
+
+// This module is used for accepting SPI data
+// from the Pi and then sending back the keystroke
+// presses to the Pi in order to update the board. 
+
+module spi_slave (input logic  sclk,
+						input logic  cs,
+						input logic  sdi,
+						output logic sdo,
+						input logic  [7:0] keyByte);
+						
+	logic [2:0] cnt;
+	logic 		qdelayed;
+	logic [7:0] q;
+	
+// This first block of logic is used as a counter 
+// this will keep track of the number of sclk cycles passing
+	
+	always_ff@(negedge sclk)
+	if (~cs) cnt = 0;
+	else cnt = cnt + 3'b1;
+	
+// This block of logic will mux the output Key and q 
+// and shift over one bit for spi communication.
+	
+	always_ff@(posedge sclk)
+		q <= (cnt == 0) ? {keyByte[6:0], sdi} : {q[6:0], sdi};
+		
+// This block of logic will set qdelayed and mux keyByte and qdelayed to SDO 
+		
+	always_ff@(negedge sclk)
+		qdelayed = q[7];
+	assign sdo = (cnt == 0) ? keyByte[7] : qdelayed;
+	
+endmodule
+
+// This module will take in the SPI signals coming from the Pi and 
+// set them equal to board so that board will remain updated anytime there is
+// a change in the board state
+
+module spi_board_slave (input logic  sclk,
+								input logic  cs,
+								input logic  sdi,
+								input logic  load,
+								output logic [1:0] board [N - 1:0][N - 1:0],
+								output logic [15:0] numNotSpaces,
+								output logic [11:0] sendCount,
+								output logic [7:0]  boardOut,
+								output logic [4:0]  matrow,
+								output logic [4:0]  matcol);
+		
+		logic [2:0] bitCount;
+		logic [7:0] char;
+		
+// This block of logic was used to update char when SPI data is coming into the board.
+
+		always_ff@(posedge sclk)
+			if(load) begin
+				if (bitCount < 4'd8) begin
+					char <= {char[6:0], sdi};
+				end
+			end
+		
+// This block of logic was used to debug the SPI receive before sending that
+// information to the board.  This logic will cycle throught matrow and matcol,
+// and update the information for each individual bit.
+		
+		always_ff@(negedge sclk) begin
+			if(load) begin
+				if (bitCount == 4'd7) begin
+					board[matrow][matcol] <= char[1:0];
+					sendCount <= sendCount + 1;
+					if(char == 8'd35) begin
+						numNotSpaces <= numNotSpaces + 1;
+					end
+					if (matcol == N - 1) begin
+						matrow <= matrow + 1;
+					end
+					matcol <= matcol + 1;
+				end
+				bitCount <= bitCount + 1;
+			end else begin
+				matrow <= 0;
+				matcol <= 0;
+			end
+		end
+		
+endmodule
+
+// This module will latch the board so that we can avoid errors in sending the board state,
+// this module helps us maintain the same board and successfully debug.
+
+module pad_and_latch_board_state(input logic sclk,
+											input logic board_spi_done,
+											input logic matrix_idle,
+											input logic [1:0] board [N - 1:0][N - 1:0],
+											output logic [1:0] latched_board [N - 1:0][N - 1:0]);
+
+		always_ff @(posedge sclk)
+			if(board_spi_done) begin
+				latched_board <= board;
+			end
+											
+endmodule
