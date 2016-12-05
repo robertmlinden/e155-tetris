@@ -8,7 +8,7 @@
 #include <time.h>
 
 /////////////////////////////////////////////////////////////////////
-// Constants
+// GPIO, SPI0, and SYS_TIMER CONSTANTS (taken from easyPIO.h)
 /////////////////////////////////////////////////////////////////////
 
 // GPIO FSEL Types
@@ -25,8 +25,6 @@
 #define GPSET    ((volatile unsigned int *) (gpio + 7))
 #define GPCLR    ((volatile unsigned int *) (gpio + 10))
 #define GPLEV    ((volatile unsigned int *) (gpio + 13))
-#define INPUT  0
-#define OUTPUT 1
 
 // Physical addresses
 #define BCM2836_PERI_BASE        0x3F000000
@@ -41,7 +39,6 @@
 #define ROTATE_CW 0x5
 #define USE_BONUS 0xB
 
-
 volatile unsigned int *spi0; //pointer to base of spi0
 
 // A struct to readably access relevant bits in the spi0 chip select register
@@ -54,6 +51,10 @@ typedef struct
 	unsigned 			:15;
 } spi0csbits;
 
+// Pointers that will be memory mapped when pioInit() is called
+volatile unsigned int *gpio; //pointer to base of gpio
+volatile unsigned int *sys_timer; // pointer to base of system timer
+
 #define SPI0CSbits (* (volatile spi0csbits*) (spi0 + 0))
 #define SPI0CS (* (volatile unsigned int*) (spi0 + 0))
 #define SPI0FIFO (* (volatile unsigned int*) (spi0 + 1))
@@ -61,42 +62,53 @@ typedef struct
 
 #define SCLK_FREQ 150000
 
-#define JUNK_BYTE	   0b00000000
+/////////////////////////////////////////////////////////////////////
+// Game-Related Constants and Variables
+/////////////////////////////////////////////////////////////////////
 
-#define KEYCHECK_INTERVAL_MICROS 100
-
+// The game tick length in seconds
 #define TICK_LENGTH_SECONDS 0.4
 
+// The amount of rows that need to be eliminated since the last
+// use of a bonus piece (or the beginning of the game) before the user
+// gets another (their first) bonus piece
 #define BONUS_PIECE_POTENTIAL_NEEDED 1
 
-#define RESET 12
-#define LOAD 16
-#define SCLK 20
-#define MOSI 21
-
-#define SCLK_FREQ_NANOS 50
-
+// The length in pixels of the LED matrix (width and height)
 #define N 32
 
+/////////////////////////////////////////////////////////////////////
+// SPI Constants
+/////////////////////////////////////////////////////////////////////
+
+// The pixel coordinates of where the next piece bounding box will appear
 #define NEXT_PIECE_LED_ROW_BEGIN 0x15
 #define NEXT_PIECE_LED_ROW_END   0x1A
 #define NEXT_PIECE_LED_COL_BEGIN 0x15
 #define NEXT_PIECE_LED_COL_END   0x1A
 
+// The pixel coordinates of where the bonus piece bounding box will appear
 #define BONUS_PIECE_LED_ROW_BEGIN 0x15
 #define BONUS_PIECE_LED_ROW_END   0x1A
 #define BONUS_PIECE_LED_COL_BEGIN 0x08
 #define BONUS_PIECE_LED_COL_END   0x0D
 
-// Pointers that will be memory mapped when pioInit() is called
-volatile unsigned int *gpio; //pointer to base of gpio
-volatile unsigned int *sys_timer; // pointer to base of system timer
+#define JUNK_BYTE	   0b00000000
+
+// The interval with which the Pi checks for new key presses from the FPGA
+#define KEYCHECK_INTERVAL_MICROS 100
+
+// High while the SPI bytes representing the board are
+// in the process of being sent to the FPGA
+#define LOAD_PIN 16
 
 const unsigned int CLK_FREQ = 1200000000;
 bool acceptNewKeystroke = true;
 bool useBonusPiece = false;
 
-struct timespec deadline;
+/////////////////////////////////////////////////////////////////////
+// GPIO, SPI0, and SYS_TIMER FUNCTIONS (taken from easyPIO.h)
+/////////////////////////////////////////////////////////////////////
 
 void pinMode(int pin, int function)
 {
@@ -165,6 +177,7 @@ void spi0Init() {
 	SPI0CSbits.TA = 1;
 }
 
+
 void pioInit() {
 	int  mem_fd;
 	void *reg_map;
@@ -191,6 +204,7 @@ void pioInit() {
 
 	gpio = (volatile unsigned *)reg_map;
 }
+
 
 void timerInit() {
 	int  mem_fd;
@@ -219,40 +233,9 @@ void timerInit() {
 	sys_timer = (volatile unsigned *)reg_map;
 }
 
-void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, FallingPiece* bonusPiece,
-		char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
-	printf("********************************************************\n");
-	printf("Game State\n\n");
-	displayBoard(fallingPiece, board);
-	printf("Score: %d\n\n", score);
-	displayPiece(nextPiece);
-	if(bonusPiece -> pieceShape != NONEXISTENT) {
-		displayPiece(bonusPiece);
-	}
-	printf("********************************************************\n");
-}
-
-void sleepNanos(int nanos) {
-	deadline.tv_nsec = nanos;
-	clock_nanosleep(CLOCK_REALTIME, 0, &deadline, NULL);
-}
-
-void gameBoardToLedBoardCoords(int* row, int* col) {
-	int temp = *col;
-	*col = 26 - *row;
-	*row = temp + 2;
-}
-
-void ledBoardToGameBoardCoords(int* row, int* col) {
-	int temp = *col;
-	*col = *row - 2;
-	*row = 26 - temp;
-}
-
-bool isBoardSquare(int row, int col) {
-	return row >= 0 && row < BOARD_HEIGHT && col >= 0 && col < BOARD_WIDTH;
-}
-
+/*
+ * Simply stalls for "micros" microseconds
+ */
 void delayMicros(unsigned int micros) {
 	sys_timer[3] = sys_timer[1] + micros;
 	sys_timer[0] &= 0b0001;
@@ -270,6 +253,7 @@ void digitalWrite(int pin, int val) {
 	else GPCLR[reg] = 1 << offset;
 }
 
+
 int digitalRead(int pin) {
     int reg = pin / 32;
     int offset = pin % 32;
@@ -277,344 +261,188 @@ int digitalRead(int pin) {
     return (GPLEV[reg] >> offset) & 0x00000001;
 }
 
+
 char spiSendReceive(char byte) {
 	SPI0FIFO = byte;
-	while(!SPI0CSbits.DONE) {
-		//printf("%d,", digitalRead(6));
-	}
-	// printf("%d,", SPI0FIFO);
+	while(!SPI0CSbits.DONE);
 	return SPI0FIFO;
 }
 
-// Send on posedge
-void spiSendBoard(char led_board[N][N]) {
-	printf("Before Send: %d\n", sys_timer[1]);
-	digitalWrite(SCLK, 0);
 
-	// Send SCLK signals for reset purposes on the FPGA
-	int cycle;
-	for(cycle = 0; cycle < 3; cycle++) {
-		sleepNanos((int) (SCLK_FREQ_NANOS / 2));
-		// delayMicros(4);
-		digitalWrite(SCLK, 1);
-		sleepNanos((int) (SCLK_FREQ_NANOS / 2));
-		// delayMicros(4);
-		digitalWrite(SCLK, 0);
-	}
-	sleepNanos(SCLK_FREQ_NANOS * 2);
-	// delayMicros(4);
+/*
+ * Takes in the game board row (as "int* col") and game board col (as "int* row)
+ * and returns the corresponding LED board row (as "int* row") 
+ * and LED board col (as "int* col).
+ *
+ * This is currently unused but could at some point become useful
+ */
 
-	// Send the LOAD signal high to tell the FPGA to start
-	// Shifting bits on sclk posedges
-	digitalWrite(LOAD, 1);
-	sleepNanos(SCLK_FREQ_NANOS * 2);
-	// delayMicros(4);
-	
-
-	int row, col;
-	// printf("\n\n");
-	
-	for(row = 0; row < N; row++) {
-		for(col = 0; col < N; col++) {
-			int bit;
-			char sendChar = led_board[row][col];
-			for(bit = 7; bit >= 0; bit--) {
-				int sendBit = (sendChar >> bit) & 1;
-				//printf("%d", sendBit);
-				digitalWrite(MOSI, sendBit);
-				sleepNanos((int) (SCLK_FREQ_NANOS / 2));
-				// delayMicros(4);
-				digitalWrite(SCLK, 1);
-				sleepNanos((int) (SCLK_FREQ_NANOS / 2));
-				// delayMicros(4);
-				digitalWrite(SCLK, 0);
-			}
-			//printf(" ");
-		}
-		//printf("\n\n");
-	}
-	//printf("\n\n\n");
-
-	sleepNanos(SCLK_FREQ_NANOS * 2);
-	// delayMicros(4);
-	digitalWrite(LOAD, 0);
-	printf("After Send: %d\n", sys_timer[1]);
+void gameBoardToLedBoardCoords(int* row, int* col) {
+	int temp = *col;
+	*col = 26 - *row;
+	*row = temp + 2;
 }
 
-void spiSendUpdatedPixel(char value, int row, int col) {
-	SPI0CSbits.TA = 1;
-	spiSendReceive((char) (row & 0xFF));
-	spiSendReceive((char) (col & 0xFF));
-	spiSendReceive(value);
-	SPI0CSbits.TA = 0;
+
+/*
+ * Takes in the LED board row (as "int* col") and LED board col (as "int* row)
+ * and returns the corresponding game board row (as "int* row") 
+ * and game board col (as "int* col).
+ *
+ * This is used in sending the game state via SPI from the Pi to the FPGA
+ * found in the function sendBoardState()
+ */
+void ledBoardToGameBoardCoords(int* row, int* col) {
+	int temp = *col;
+	*col = *row - 2;
+	*row = 26 - temp;
+}
+
+
+/*
+ * Determines whether the coordinates (row, col) fall within the bounds of the
+ * tetris board.
+ */
+bool isBoardSquare(int row, int col) {
+	return row >= 0 && row < BOARD_HEIGHT && col >= 0 && col < BOARD_WIDTH;
+}
+
+
+/*
+ * Sends the game state via SPI to the FPGA
+ * Also prints the LED board representation to terminal if the debugging variable
+ * just below PRINT_LED_BOARD_REPRESENTATION is true
+ */
+
+#define PRINT_LED_BOARD_REPRESENTATION false
+
+void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
+			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+
+	// Send a junk byte to the FPGA for reset purposes
+	// This is the only byte sent over while LOAD_PIN is low
+	spiSendReceive(JUNK_BYTE);
+	digitalWrite(LOAD_PIN, 1);
+
+	char fallingPieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	getPieceChars(fallingPieceChars, fallingPiece);	
+
+	char nextPieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	getPieceChars(nextPieceChars, nextPiece);
+
+	char bonusPieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
+	if(bonusPiece -> pieceShape != NONEXISTENT) {
+		getPieceChars(bonusPieceChars, bonusPiece);
+	}
+	
+	// LED board row and column
+	int lrow, lcol;
+
+	for(lrow = 0; lrow < N; lrow++) {
+		for(lcol = 0; lcol < N; lcol++) {
+			// Game board row and col corresponding to the LED row and col
+			int brow = lrow;
+			int bcol = lcol;
+			ledBoardToGameBoardCoords(&brow, &bcol);
+
+			char sendChar;
+
+			// If the LED pixel corresponds to one that displays part
+			// of the game board, look at the game board to determine
+			// the SPI to be sent over
+			if(isBoardSquare(brow, bcol)) {
+				int fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
+				int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
+				int fallingPieceColDisplayBegin = fallingPiece -> c;
+				int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
+
+				if(isInSquare(brow, bcol, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
+								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
+					sendChar = (board[brow][bcol] == ' ') ? 
+							fallingPieceChars[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
+							board[brow][bcol];
+					if(sendChar != ' ') sendChar = 'F';
+					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+					if(PRINT_LED_BOARD_REPRESENTATION) {
+						printf("%c", sendChar);
+					}
+				}
+				else {
+					sendChar = board[brow][bcol];
+					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+					if(PRINT_LED_BOARD_REPRESENTATION) {
+						printf("%c", sendChar);
+					}
+				}
+			}
+			// If on the border of the next piece bounding box, send SPI over
+			// corresponding to a border
+			else if(isOnSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN, NEXT_PIECE_LED_ROW_END,
+							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
+				sendChar = '#';
+				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					printf("%c", sendChar);
+				}
+			}
+			// If within the next piece bounding box, send SPI over
+			// corresponding to the next piece
+			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
+							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
+				sendChar = nextPieceChars[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
+				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					printf("%c", sendChar);
+				}
+			}
+			// If on the border of the bonus piece bounding box, send SPI over
+			// corresponding to a border
+			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
+							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
+				sendChar = '#';
+				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					printf("%c", sendChar);
+				}
+			}
+			// If within the bonus piece bounding box, send SPI over
+			// corresponding to the bonus piece (if the player has one)
+			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
+							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
+							bonusPiece -> pieceShape != NONEXISTENT) {
+				sendChar = bonusPieceChars[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
+				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					printf("%c", sendChar);
+				}
+			}
+			// If none of the above cases are met,
+			// the corresponding LED pixel should not be lit
+			else {
+				sendChar = ' ';
+				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					printf("%c", sendChar);
+				}
+			}
+		}
+		if(PRINT_LED_BOARD_REPRESENTATION) {
+			printf("\n");
+		}
+	}
+
+	// The board SPI transfer is done, so drop LOAD low
+	digitalWrite(LOAD_PIN, 0);
 }
 
 /*
-void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
-			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-	// digitalWrite(LOAD, 1);
-	printf("%d\n", sys_timer[1]);
-	// delayMicros(5);
-	printf("YES: %d,", digitalRead(6));
-	digitalWrite(LOAD, 1);
-	delayMicros(5);
-printf("YES: %d,", digitalRead(6));
-
-	// char led_board[N][N];
-
-	int numSpacesSent = 0;
-
-	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(piece, fallingPiece);
-	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(piece, fallingPiece);	
-
-	char nextPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(nextPieceLED, nextPiece);
-
-	int nextCount = 0;
-	int sendCount = 0;
-
-	char bonusPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	if(bonusPiece -> pieceShape != NONEXISTENT) {
-		getPiece(bonusPieceLED, bonusPiece);
-	}
-	
-	int lrow, lcol;
-	for(lrow = 0; lrow < N; lrow++) {
-		// printf("YES: %d,", digitalRead(6));
-		for(lcol = 0; lcol < N; lcol++) {
-			int brow = lrow;
-			int bcol = lcol;
-			ledBoardToGameBoardCoords(&brow, &bcol);
-
-			char sendChar;
-
-			if(isBoardSquare(brow, bcol)) {
-				int fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
-				int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
-				int fallingPieceColDisplayBegin = fallingPiece -> c;
-				int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
-
-				if(isInSquare(brow, bcol, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-					sendChar = (board[brow][bcol] == ' ') ? 
-							piece[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
-							board[brow][bcol];
-					if(sendChar != ' ') sendChar = 'F';
-					// led_board[lrow][lcol] = sendChar;
-					// spiSendReceive(sendChar);
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-					printf("%c", sendChar);
-					if(sendChar == ' ') numSpacesSent++;
-					sendCount++;
-				}
-				else {
-					sendChar = board[brow][bcol];
-					// led_board[lrow][lcol] = sendChar;
-					// spiSendReceive(sendChar);
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-					printf("%c", sendChar);
-					if(sendChar == ' ') numSpacesSent++;
-					sendCount++;
-				}
-			
-				// spiSendReceive(board[brow][bcol]);
-				// printf("%c", board[brow][bcol]);
-				// printf("%d,", board[brow][bcol]);
-			}
-			else if(isOnSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN, NEXT_PIECE_LED_ROW_END,
-							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
-				sendChar = '#';
-				// led_board[lrow][lcol] = sendChar;
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				sendCount++;
-			}
-			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
-							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
-				sendChar = nextPieceLED[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
-				// led_board[lrow][lcol] = sendChar;
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				if(sendChar == ' ') numSpacesSent++;
-				else nextCount++;
-				sendCount++;
-			}
-			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
-							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
-				
-				sendChar = '#';
-				// led_board[lrow][lcol] = sendChar;
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				sendCount++;
-			}
-			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
-							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
-							bonusPiece -> pieceShape != NONEXISTENT) {
-				sendChar = bonusPieceLED[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
-				// led_board[lrow][lcol] = sendChar;
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				if(sendChar == ' ') numSpacesSent++;
-				sendCount++;
-			}
-			else {
-				sendChar = ' ';
-				// led_board[lrow][lcol] = sendChar;
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				numSpacesSent++;
-				sendCount++;
-			}
-		}
-		printf("\n");
-	}
-	printf("%d\n", sys_timer[1]);
-	// spiSendBoard(led_board);
-	printf("%d", sys_timer[1]);
-	sleepNanos(1);
-	printf("%d", sys_timer[1]);
-	// printf("YES: %d,", digitalRead(6));
-	// digitalWrite(LOAD, 0);
-	printf("Next Count = %d\n", nextCount);
-	printf("%d", sys_timer[1]);
-	printf("Number of spaces sent: %d\n", numSpacesSent);
-	printf("Total number of characters sent: %d\n", sendCount);
-// delayMicros(5000);
-printf("NO: %d,", digitalRead(6));
-}
-*/
-
-void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
-			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-	spiSendReceive(JUNK_BYTE);
-	digitalWrite(LOAD, 1);
-	delayMicros(5);
-
-	int numSpacesSent = 0;
-
-	char piece[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(piece, fallingPiece);	
-
-	char nextPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	getPiece(nextPieceLED, nextPiece);
-
-	int nextCount = 0;
-	int sendCount = 0;
-
-	char bonusPieceLED[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
-	if(bonusPiece -> pieceShape != NONEXISTENT) {
-		getPiece(bonusPieceLED, bonusPiece);
-	}
-	
-	int lrow, lcol;
-
-	for(lrow = 0; lrow < N; lrow++) {
-		for(lcol = 0; lcol < N; lcol++) {
-			int brow = lrow;
-			int bcol = lcol;
-			ledBoardToGameBoardCoords(&brow, &bcol);
-
-			char sendChar;
-
-			if(isBoardSquare(brow, bcol)) {
-				int fallingPieceRowDisplayBegin = fallingPiece -> r >= 1 ? fallingPiece -> r : 1;
-				int fallingPieceRowDisplayEnd = fallingPiece -> r + 3;
-				int fallingPieceColDisplayBegin = fallingPiece -> c;
-				int fallingPieceColDisplayEnd = fallingPiece -> c + 3;
-
-				if(isInSquare(brow, bcol, fallingPieceRowDisplayBegin, fallingPieceRowDisplayEnd,
-								fallingPieceColDisplayBegin, fallingPieceColDisplayEnd)) {
-					sendChar = (board[brow][bcol] == ' ') ? 
-							piece[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
-							board[brow][bcol];
-					if(sendChar != ' ') sendChar = 'F';
-					// spiSendReceive(sendChar);
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-					// spiSendReceive(sendChar);
-					printf("%c", sendChar);
-					if(sendChar == ' ') numSpacesSent++;
-					sendCount++;
-				}
-				else {
-					// spiSendReceive(board[brow][bcol]);
-					sendChar = board[brow][bcol];
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-					printf("%c", sendChar);
-					if(sendChar == ' ') numSpacesSent++;
-					// spiSendReceive(board[brow][bcol]);
-					// printf("%c", board[brow][bcol]);
-					if(board[brow][bcol] == ' ') numSpacesSent++;
-					sendCount++;
-				}
-			
-				// spiSendReceive(board[brow][bcol]);
-				// printf("%c", board[brow][bcol]);
-				// printf("%d,", board[brow][bcol]);
-			}
-			else if(isOnSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN, NEXT_PIECE_LED_ROW_END,
-							NEXT_PIECE_LED_COL_BEGIN, NEXT_PIECE_LED_COL_END)) {
-				// spiSendReceive('#');
-				sendChar = '#';
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("#");
-				sendCount++;
-			}
-			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
-							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
-				sendChar = nextPieceLED[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				if(sendChar == ' ') numSpacesSent++;
-				else nextCount++;
-				sendCount++;
-			}
-			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
-							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
-				// spiSendReceive('#');
-				sendChar = '#';
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("#");
-				sendCount++;
-			}
-			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
-							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
-							bonusPiece -> pieceShape != NONEXISTENT) {
-				sendChar = bonusPieceLED[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
-				// spiSendReceive(sendChar);
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf("%c", sendChar);
-				if(sendChar == ' ') numSpacesSent++;
-				sendCount++;
-			}
-			else {
-				// spiSendReceive(' ');
-				sendChar = ' ';
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
-				printf(" ");
-				numSpacesSent++;
-				sendCount++;
-			}
-		}
-		printf("\n");
-	}
-	printf("YES: %d,", digitalRead(6));
-	digitalWrite(LOAD, 0);
-	printf("Next Count = %d\n", nextCount);
-	printf("Number of spaces sent: %d\n", numSpacesSent);
-	printf("Total number of characters sent: %d\n", sendCount);
-delayMicros(5000);
-printf("NO: %d,", digitalRead(6));
-}
-
+ * This function drives game ticks by running a while loop for TICK_LENGTH_SECONDS seconds.
+ * In order for key presses to be registered, there must be code within the while loop that
+ * checks to see if KEYCHECK_INTERVAL_MICROS time has passed. If so, the Pi (SPI Master)
+ * sends a junk byte of data to the FPGA via SPI. The purpose of this is to get
+ * a meaningful byte of data back from the FPGA representing the key pressed.
+ * The Pi then reads the key and updates the game state accordingly (see switch statement).
+ */
 void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece, FallingPiece* bonusPiece,
 					char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
@@ -624,14 +452,9 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 	sys_timer[6] = sys_timer[1] + KEYCHECK_INTERVAL_MICROS;
 	sys_timer[0] &= 0b1000;
 
-	// printf("Before While!\n");
-
 	while(!(sys_timer[0] & 0b0010)) {
 		if(sys_timer[0] & 0b1000) {
-			// printf("Before Receive!\n");
 			char keyByte = spiSendReceive(JUNK_BYTE);
-			// printf("After Receive!\n");
-			// printf("Key Byte = \"%d\", ", keyByte);
 			if(keyByte >> 7) {
 				if(acceptNewKeystroke) {
 					acceptNewKeystroke = false;
@@ -673,6 +496,9 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 	}
 }
 
+/*
+ * Delegates work to delayMicrosAndWaitForKeyPress()
+ */
 void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
 					FallingPiece* nextPiece,
 					FallingPiece* bonusPiece,
@@ -682,52 +508,50 @@ void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
 }
 
 void main(void) {
+	// Set up and initialize Pi memory pointers
 	pioInit();
 	spi0Init();
 	timerInit();
-	deadline.tv_sec = 0;
 
-	pinMode(6, INPUT);
-	pinMode(LOAD, OUTPUT);
-	pinMode(SCLK, OUTPUT);
-	pinMode(MOSI, OUTPUT);
-	pinMode(6, INPUT);
-	pinMode(LOAD, OUTPUT);
-
-	digitalWrite(LOAD, 0);
-	// digitalWrite(RESET, 1);
+	pinMode(LOAD_PIN, OUTPUT);
+	digitalWrite(LOAD_PIN, 0);
 
 	// Seed our random number generator
 	srand(time(NULL));
 
 	FallingPiece fallingPiece, nextPiece, bonusPiece;
-    
+
+	// The tetris game board representation
+	// Does not represent the falling piece, next piece, bonus piece, or score.
+	// Those pieces of information are stored separately.
 	char board[BOARD_HEIGHT][BOARD_WIDTH];
 	
 	initBoard(board);
 	newFallingPiece(&fallingPiece);
 	newFallingPiece(&nextPiece);
-	bonusPiece.pieceShape = NONEXISTENT;
 
-	// LedPixel* changedPixels = malloc(32 * 32 * sizeof(LedPixel));
-	// initChangedPixels(changedPixels, board);
+	// Setting pieceShape to NONEXISTENT signifies that the user does not
+	// currently have a bonus piece
+	bonusPiece.pieceShape = NONEXISTENT;
 	
+	// Game score
 	int score = 0;
 
+	// The amount of rows the user has eliminated since the last bonus
+	// piece used (or since the beginning of the game). If this becomes at
+	// least as great as BONUS_PIECE_POTENTIAL_NEEDED, then the user
+	// is granted a bonus piece to use at will for their next turn
 	int bonusPiecePotential = 0;
 
 	bool gameOver = false;
 
 	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-	// printf("GOT HERE\n");
 	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 
-	printf("BOARD STATE SENT!!\n");
-
 	while(!gameOver) {
-		// printf("AA\n");
  		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
-		// printf("BB\n");
+
+		// Let gravity tick and check for the number of rows eliminated
  		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
 
 		bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
@@ -738,7 +562,6 @@ void main(void) {
 
 		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
-		printf("BOARD STATE SENT!!\n");
 
 		if(rowsEliminatedOnTick == -1) {
 			gameOver = true;
@@ -764,135 +587,14 @@ void main(void) {
 
 			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 			sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
-			printf("BOARD STATE SENT!!\n");
 		}
      	}
-
-	printf("DONE\n");
-	// free(changedPixels);
 }
 
-void main2(void) {
-	pioInit();
-	timerInit();
-	spi0Init();
-
-	srand(time(NULL));
-
-	FallingPiece fallingPiece, nextPiece, bonusPiece;
-
-	// A flag indicating that there is a available bonus piece
-	// bool hasBonus = false;
-    
-	char board[BOARD_HEIGHT][BOARD_WIDTH];
-	
-	initBoard(board);
-	newFallingPiece(&fallingPiece);
-	newFallingPiece(&nextPiece);
-	bonusPiece.pieceShape = NONEXISTENT;
-	
-	int tickLengthSeconds = 1;
-	int score = 0;
-	int bonusPiecePotential = 0;
-
-	bool gameOver = false;
-
-	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-
-	while(!gameOver) {
-		printf("\nEnter a one-letter command:\n");
-		printf("\ta: Move Left\n");
-		printf("\td: Move Right\n");
-		printf("\tw: Rotate Clockwise\n");
-		printf("\ts: Rotate Counterclockwise\n");
-		printf("\tb: Use bonus piece (if available) for next piece\n");
-		printf("\tt: Tick\n");
-		printf("\n");
-		
-		int selection = getchar();
-		int rowsEliminatedOnTick;
-	
-		switch((char) selection) {
-			case 'a':
-				move(&fallingPiece, false, board);
-				break;
-			case 'd':
-				move(&fallingPiece, true, board);
-				break;
-			case 'w':
-				rotate(&fallingPiece, true, board);
-				break;
-			case 's':
-				rotate(&fallingPiece, false, board);
-				break;
-			case 'b':
-				if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED) {
-					useBonusPiece = true;
-					printf("ACTIVATED!!\n");
-				}
-				break;
-			case 't':
-				rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
-				bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
-				printf("Bonus Piece Potential = %d\n", bonusPiecePotential);
-				if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
-						bonusPiece.pieceShape == NONEXISTENT) {
-					newFallingPiece(&bonusPiece);
-				}
-
-				if(rowsEliminatedOnTick == -1) {
-					gameOver = true;
-				}
-				else if(rowsEliminatedOnTick == -2) {
-					// This is not a piece transition, Nothing to do here
-				}
-				else {
-					score += rowsEliminatedOnTick;
-					if(useBonusPiece) {
-						fallingPiece = bonusPiece;
-						bonusPiece.pieceShape = NONEXISTENT;
-						useBonusPiece = false;
-						bonusPiecePotential = 0;
-					}
-					else {
-						fallingPiece = nextPiece;
-						newFallingPiece(&nextPiece);
-					}
-				}
-				
-				break;
-			
-		}		
-
-		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-    	}
-
-	printf("DONE\n");
-}
-
-
-/////////////////////////////////////////////////////
-
-void initChangedPixels(LedPixel* changedPixels, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
-	int lrow, lcol;
-	for(lrow = 0; lrow < N; lrow++) {
-		for(lcol = 0; lcol < N; lcol++) {
-			int row, col;
-			ledBoardToGameBoardCoords(&row, &col);
-
-			int index = (lrow * N) + lcol;
-
-			LedPixel ledPixel;
-			ledPixel.row = row;
-			ledPixel.col = col;
-
-			if(isBoardSquare(row, col)) {				
-				ledPixel.value = board[row][col];
-			}
-			else {
-				 ledPixel.value = ' ';
-			}
-			changedPixels[index] = ledPixel;
-		}
-	}
-}
+/////////////////////////////////////////////////////////////////////
+// Future Work
+/////////////////////////////////////////////////////////////////////
+// Acceleration downwards?
+// soft, non-sticky landings?
+// Another button to just lead-drop the piece?
+// Rotation glitches

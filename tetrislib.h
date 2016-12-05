@@ -8,14 +8,6 @@
 
 // Pieces and Piece Types ////////////////////////////////////////////////////////
 
-#define S 0
-#define Z 1
-#define I 2
-#define O 3
-#define T 4
-#define L 5
-#define J 6
-
 typedef struct {
 	int pieceShape;
 	int rotation;
@@ -35,8 +27,6 @@ typedef struct {
 #define NUM_PIECES 7
 #define NUM_ROTATIONS 4
 #define PIECE_BLOCK_SIZE 4
-
-#define NEEDED_BONUS_PIECE_POTENTIAL 5
 
 // Miscellaneous ///////////////////////////////////////////////////
 
