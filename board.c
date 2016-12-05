@@ -229,25 +229,25 @@ void newFallingPiece(FallingPiece* fallingPiece) {
 
 	// Determine exact coordinates for each starting piece based on piece shape
 	if (fallingPiece->pieceShape == S) {
-		fallingPiece->r = -1;
-		fallingPiece->c = 5;
-	} else if (fallingPiece->pieceShape == Z){
-		fallingPiece->r = -1;
-		fallingPiece->c = 4;
-	} else if (fallingPiece->pieceShape == I){
-		fallingPiece->r = -1;
-		fallingPiece->c = 4;
-	} else if (fallingPiece->pieceShape == O){
 		fallingPiece->r = -2;
 		fallingPiece->c = 5;
+	} else if (fallingPiece->pieceShape == Z){
+		fallingPiece->r = -2;
+		fallingPiece->c = 4;
+	} else if (fallingPiece->pieceShape == I){
+		fallingPiece->r = -2;
+		fallingPiece->c = 4;
+	} else if (fallingPiece->pieceShape == O){
+		fallingPiece->r = -3;
+		fallingPiece->c = 5;
 	} else if (fallingPiece->pieceShape == T){
-		fallingPiece->r = -1;
+		fallingPiece->r = -2;
 		fallingPiece->c = 4;
 	} else if (fallingPiece->pieceShape == L){
-		fallingPiece->r = -1;
+		fallingPiece->r = -2;
 		fallingPiece->c = 5;
 	} else if (fallingPiece->pieceShape == J){
-		fallingPiece->r = -1;
+		fallingPiece->r = -2;
 		fallingPiece->c = 4;
 	} else {
 		fallingPiece->r = 0;
@@ -290,8 +290,13 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][B
  * Returns the number of rows eliminated due to the tick if the piece has just landed
  * Returns -2 if the piece is still floating after the gravity tick
  */
-int tick(FallingPiece* fallingPiece, FallingPiece* nextPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+int tick(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	fallingPiece -> r = (fallingPiece -> r) + 1;
+
+	return checkForSolidification(fallingPiece, board);
+}
+
+int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 	char fallingPieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE];
 	getPieceChars(fallingPieceChars, fallingPiece);	
 

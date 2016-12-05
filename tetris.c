@@ -67,7 +67,7 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 /////////////////////////////////////////////////////////////////////
 
 // The game tick length in seconds
-#define TICK_LENGTH_SECONDS 0.4
+#define TICK_LENGTH_SECONDS 0.05
 
 // The amount of rows that need to be eliminated since the last
 // use of a bonus piece (or the beginning of the game) before the user
@@ -103,8 +103,13 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 #define LOAD_PIN 16
 
 const unsigned int CLK_FREQ = 1200000000;
+
+/////////////////////////////////////////////////////////////////////
+// Global Game Variables
+/////////////////////////////////////////////////////////////////////
 bool acceptNewKeystroke = true;
 bool useBonusPiece = false;
+bool gameOver = false;
 
 /////////////////////////////////////////////////////////////////////
 // GPIO, SPI0, and SYS_TIMER FUNCTIONS (taken from easyPIO.h)
@@ -314,7 +319,7 @@ bool isBoardSquare(int row, int col) {
  * just below PRINT_LED_BOARD_REPRESENTATION is true
  */
 
-#define PRINT_LED_BOARD_REPRESENTATION false
+#define PRINT_LED_BOARD_REPRESENTATION true
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
@@ -481,7 +486,9 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case USE_BONUS:
-							useBonusPiece = true;
+							if(bonusPiece -> pieceShape != NONEXISTENT) {
+								useBonusPiece = true;
+							}
 							break;
 					}
 				}
@@ -543,8 +550,6 @@ void main(void) {
 	// is granted a bonus piece to use at will for their next turn
 	int bonusPiecePotential = 0;
 
-	bool gameOver = false;
-
 	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 
@@ -552,16 +557,13 @@ void main(void) {
  		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
 
 		// Let gravity tick and check for the number of rows eliminated
- 		int rowsEliminatedOnTick = tick(&fallingPiece, &nextPiece, board);
+ 		int rowsEliminatedOnTick = tick(&fallingPiece, board);
 
 		bonusPiecePotential += rowsEliminatedOnTick >= 0 ? rowsEliminatedOnTick : 0;
 		if(bonusPiecePotential >= BONUS_PIECE_POTENTIAL_NEEDED &&
 						bonusPiece.pieceShape == NONEXISTENT) {
 			newFallingPiece(&bonusPiece);
 		}
-
-		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 
 		if(rowsEliminatedOnTick == -1) {
 			gameOver = true;
@@ -571,8 +573,6 @@ void main(void) {
 		}
 		else {
 			score += rowsEliminatedOnTick;
-
-			delaySeconds(TICK_LENGTH_SECONDS);
 
 			if(useBonusPiece) {
 				fallingPiece = bonusPiece;
@@ -584,11 +584,12 @@ void main(void) {
 				fallingPiece = nextPiece;
 				newFallingPiece(&nextPiece);
 			}
-
-			displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-			sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 		}
+
+		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
      	}
+	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
 }
 
 /////////////////////////////////////////////////////////////////////
