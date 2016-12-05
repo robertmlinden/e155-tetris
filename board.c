@@ -209,7 +209,7 @@ void initBoard(char board[BOARD_HEIGHT][BOARD_WIDTH]) {
 
 /*
  * A helper function that takes a FallingPiece (information about the piece)
- * And returns (via the "piece" matrix) a 4x4 character representation of the piece
+ * And returns (via the "pieceChars" matrix) a 4x4 character representation of the piece
  */
 void getPieceChars(char pieceChars[PIECE_BLOCK_SIZE][PIECE_BLOCK_SIZE], FallingPiece* piece) {
 	memcpy(pieceChars, PIECES[piece->pieceShape][piece->rotation], 

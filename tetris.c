@@ -67,7 +67,7 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 /////////////////////////////////////////////////////////////////////
 
 // The game tick length in seconds
-#define TICK_LENGTH_SECONDS 0.05
+#define TICK_LENGTH_SECONDS 0.5
 
 // The amount of rows that need to be eliminated since the last
 // use of a bonus piece (or the beginning of the game) before the user
@@ -92,6 +92,22 @@ volatile unsigned int *sys_timer; // pointer to base of system timer
 #define BONUS_PIECE_LED_ROW_END   0x1A
 #define BONUS_PIECE_LED_COL_BEGIN 0x08
 #define BONUS_PIECE_LED_COL_END   0x0D
+
+// The pixel coordinates of where the bounding boxes for the three score digits will appear
+#define D0_ROW_BEGIN 0x1B
+#define D0_ROW_END   0x1D
+#define D0_COL_BEGIN 0x01
+#define D0_COL_END   0x05
+
+#define D1_ROW_BEGIN 0x17
+#define D1_ROW_END   0x19
+#define D1_COL_BEGIN 0x01
+#define D1_COL_END   0x05
+
+#define D2_ROW_BEGIN 0x13
+#define D2_ROW_END   0x15
+#define D2_COL_BEGIN 0x01
+#define D2_COL_END   0x05
 
 #define JUNK_BYTE	   0b00000000
 
@@ -239,6 +255,78 @@ void timerInit() {
 }
 
 /*
+ * The 5x3 matrix representation for each of the digitally-displayed digits
+ * The matrix must be 5x3 so that all pieces and pieces rotations have a consistent
+ * representation size.
+ */
+
+#define NUMBER_WIDTH 3
+#define NUMBER_HEIGHT 5
+
+char NUMBERS[10][NUMBER_HEIGHT][NUMBER_WIDTH] = 
+{
+	{{'0', '0', '0'},
+	 {'0', ' ', '0'},
+	 {'0', ' ', '0'},
+	 {'0', ' ', '0'},
+	 {'0', '0', '0'}},
+
+	{{' ', '1', ' '},
+	 {' ', '1', ' '},
+	 {' ', '1', ' '},
+	 {' ', '1', ' '},
+	 {' ', '1', ' '}},
+
+	{{'2', '2', '2'},
+	 {' ', ' ', '2'},
+	 {'2', '2', '2'},
+	 {'2', ' ', ' '},
+	 {'2', '2', '2'}},
+
+	{{'3', '3', '3'},
+	 {' ', ' ', '3'},
+	 {'3', '3', '3'},
+	 {' ', ' ', '3'},
+	 {'3', '3', '3'}},
+
+	{{'4', ' ', '4'},
+	 {'4', ' ', '4'},
+	 {'4', '4', '4'},
+	 {' ', ' ', '4'},
+	 {' ', ' ', '4'}},
+
+	{{'5', '5', '5'},
+	 {'5', ' ', ' '},
+	 {'5', '5', '5'},
+	 {' ', ' ', '5'},
+	 {'5', '5', '5'}},
+
+	{{'6', '6', '6'},
+	 {'6', ' ', ' '},
+	 {'6', '6', '6'},
+	 {'6', ' ', '6'},
+	 {'6', '6', '6'}},
+
+	{{'7', '7', '7'},
+	 {' ', ' ', '7'},
+	 {' ', ' ', '7'},
+	 {' ', ' ', '7'},
+	 {' ', ' ', '7'}},
+
+	{{'8', '8', '8'},
+	 {'8', ' ', '8'},
+	 {'8', '8', '8'},
+	 {'8', ' ', '8'},
+	 {'8', '8', '8'}},
+
+	{{'9', '9', '9'},
+	 {'9', ' ', '9'},
+	 {'9', '9', '9'},
+	 {' ', ' ', '9'},
+	 {'9', '9', '9'}}
+};
+
+/*
  * Simply stalls for "micros" microseconds
  */
 void delayMicros(unsigned int micros) {
@@ -319,10 +407,44 @@ bool isBoardSquare(int row, int col) {
  * just below PRINT_LED_BOARD_REPRESENTATION is true
  */
 
-#define PRINT_LED_BOARD_REPRESENTATION true
+#define PRINT_LED_BOARD_REPRESENTATION false
+
+
+/*
+ * Converts a character on the LED representation
+ * To its corresponding color code on the LED board
+ */
+char charToColor(char sendChar) {
+	switch(sendChar) {
+		case ' ':
+			return (char) 0;
+		case '#':
+			return (char) 1;
+		/*
+		case 'F':
+		case 'N':
+		case 'B':
+			return (char) 2;
+		default:
+			return (char) 3;
+		*/
+		default:
+			return (char) 1;
+	}
+}
+
+
+/*
+ * A helper function that takes a digit
+ * And returns (via the "digitsChars" matrix) a 5x3 character representation of the digit
+ */
+void getDigitChars(char digitChars[NUMBER_HEIGHT][NUMBER_WIDTH], int digit) {
+	memcpy(digitChars, NUMBERS[digit],
+		sizeof(char) * NUMBER_HEIGHT * NUMBER_WIDTH);
+}
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
-			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH]) {
+			FallingPiece* bonusPiece, char board[BOARD_HEIGHT][BOARD_WIDTH], int score) {
 
 	// Send a junk byte to the FPGA for reset purposes
 	// This is the only byte sent over while LOAD_PIN is low
@@ -339,6 +461,15 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 	if(bonusPiece -> pieceShape != NONEXISTENT) {
 		getPieceChars(bonusPieceChars, bonusPiece);
 	}
+
+	char digit0Chars[NUMBER_HEIGHT][NUMBER_WIDTH];
+	getDigitChars(digit0Chars, score % 10);
+
+	char digit1Chars[NUMBER_HEIGHT][NUMBER_WIDTH];
+	getDigitChars(digit1Chars, (score / 10) % 10);
+
+	char digit2Chars[NUMBER_HEIGHT][NUMBER_WIDTH];
+	getDigitChars(digit2Chars, (score / 100) % 10);
 	
 	// LED board row and column
 	int lrow, lcol;
@@ -367,16 +498,18 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 							fallingPieceChars[brow - fallingPiece -> r][bcol - fallingPiece -> c] :
 							board[brow][bcol];
 					if(sendChar != ' ') sendChar = 'F';
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+					spiSendReceive(charToColor(sendChar));
 					if(PRINT_LED_BOARD_REPRESENTATION) {
-						printf("%c", sendChar);
+						// printf("%c", sendChar);
+						printf("%d", charToColor(sendChar));
 					}
 				}
 				else {
 					sendChar = board[brow][bcol];
-					spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+					spiSendReceive(charToColor(sendChar));
 					if(PRINT_LED_BOARD_REPRESENTATION) {
-						printf("%c", sendChar);
+						// printf("%c", sendChar);
+						printf("%d", charToColor(sendChar));
 					}
 				}
 			}
@@ -387,7 +520,8 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 				sendChar = '#';
 				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
-					printf("%c", sendChar);
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
 				}
 			}
 			// If within the next piece bounding box, send SPI over
@@ -395,9 +529,11 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
 							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
 				sendChar = nextPieceChars[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(sendChar != ' ') sendChar = 'N';
+				spiSendReceive(charToColor(sendChar));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
-					printf("%c", sendChar);
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
 				}
 			}
 			// If on the border of the bonus piece bounding box, send SPI over
@@ -405,9 +541,23 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			else if(isOnSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN, BONUS_PIECE_LED_ROW_END,
 							BONUS_PIECE_LED_COL_BEGIN, BONUS_PIECE_LED_COL_END)) {
 				sendChar = '#';
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				spiSendReceive(charToColor(sendChar));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
-					printf("%c", sendChar);
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
+				}
+			}
+			// If on the border of the bonus piece bounding box, send SPI over
+			// corresponding to a border
+			else if(isInSquare(lrow, lcol, BONUS_PIECE_LED_ROW_BEGIN + 1, BONUS_PIECE_LED_ROW_END - 1,
+							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
+							bonusPiece -> pieceShape != NONEXISTENT) {
+				sendChar = bonusPieceChars[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
+				if(sendChar != ' ') sendChar = 'B';
+				spiSendReceive(charToColor(sendChar));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
 				}
 			}
 			// If within the bonus piece bounding box, send SPI over
@@ -416,18 +566,57 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 							BONUS_PIECE_LED_COL_BEGIN + 1, BONUS_PIECE_LED_COL_END - 1) &&
 							bonusPiece -> pieceShape != NONEXISTENT) {
 				sendChar = bonusPieceChars[lrow - (BONUS_PIECE_LED_ROW_BEGIN + 1)][lcol - (BONUS_PIECE_LED_COL_BEGIN + 1)];
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				if(sendChar != ' ') sendChar = 'B';
+				spiSendReceive(charToColor(sendChar));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
-					printf("%c", sendChar);
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
+				}
+			}
+			// If within the least significant scoring digit, send SPI over
+			// corresponding to the digit
+			else if(isInSquare(lrow, lcol, D0_ROW_BEGIN, D0_ROW_END,
+							D0_COL_BEGIN, D0_COL_END)) {
+				sendChar = digit0Chars[D0_COL_END - lcol][lrow - D0_ROW_BEGIN];
+				if(sendChar != ' ') sendChar = '#';
+				spiSendReceive(charToColor(sendChar));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
+				}
+			}
+			// If within the second-least significant scoring digit, send SPI over
+			// corresponding to the digit
+			else if(isInSquare(lrow, lcol, D1_ROW_BEGIN, D1_ROW_END,
+							D1_COL_BEGIN, D1_COL_END)) {
+				sendChar = digit1Chars[D1_COL_END - lcol][lrow - D1_ROW_BEGIN];
+				if(sendChar != ' ') sendChar = '#';
+				spiSendReceive(charToColor(sendChar));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
+				}
+			}
+			// If within the second-least significant scoring digit, send SPI over
+			// corresponding to the digit
+			else if(isInSquare(lrow, lcol, D2_ROW_BEGIN, D2_ROW_END,
+							D2_COL_BEGIN, D2_COL_END)) {
+				sendChar = digit2Chars[D2_COL_END - lcol][lrow - D2_ROW_BEGIN];
+				if(sendChar != ' ') sendChar = '#';
+				spiSendReceive(charToColor(sendChar));
+				if(PRINT_LED_BOARD_REPRESENTATION) {
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
 				}
 			}
 			// If none of the above cases are met,
 			// the corresponding LED pixel should not be lit
 			else {
 				sendChar = ' ';
-				spiSendReceive((char) (sendChar == ' ' ? 0 : 1));
+				spiSendReceive(charToColor(sendChar));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
-					printf("%c", sendChar);
+					// printf("%c", sendChar);
+					printf("%d", charToColor(sendChar));
 				}
 			}
 		}
@@ -467,22 +656,22 @@ void delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPie
 					switch(keyCode) {
 						case MOVE_LEFT:
 							move(fallingPiece, false, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case MOVE_RIGHT:
 							move(fallingPiece, true, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CCW:
 							rotate(fallingPiece, false, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case ROTATE_CW:
 							rotate(fallingPiece, true, board);
-							sendBoardState(fallingPiece, nextPiece, bonusPiece, board);
+							sendBoardState(fallingPiece, nextPiece, bonusPiece, board, score);
 							displays(fallingPiece, nextPiece, bonusPiece, board, score);
 							break;
 						case USE_BONUS:
@@ -512,6 +701,10 @@ void delaySecondsAndWaitForKeyPress(double seconds, FallingPiece* fallingPiece,
 					char board[BOARD_HEIGHT][BOARD_WIDTH],
 					int score) {
     delayMicrosAndWaitForKeyPress((int) (seconds * 1000000), fallingPiece, nextPiece, bonusPiece, board, score);
+}
+
+int scoreIncreaseFromRowsEliminated(int rowsEliminated) {
+	return rowsEliminated * rowsEliminated;
 }
 
 void main(void) {
@@ -551,7 +744,7 @@ void main(void) {
 	int bonusPiecePotential = 0;
 
 	displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
+	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 
 	while(!gameOver) {
  		delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board, score);
@@ -572,7 +765,7 @@ void main(void) {
 			// This is not a piece transition, Nothing to do here
 		}
 		else {
-			score += rowsEliminatedOnTick;
+			score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
 
 			if(useBonusPiece) {
 				fallingPiece = bonusPiece;
@@ -587,9 +780,9 @@ void main(void) {
 		}
 
 		displays(&fallingPiece, &nextPiece, &bonusPiece, board, score);
-		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
+		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
      	}
-	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
+	sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board, score);
 }
 
 /////////////////////////////////////////////////////////////////////
