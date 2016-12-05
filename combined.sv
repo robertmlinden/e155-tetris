@@ -3,7 +3,6 @@ This code was made and developed by Robert Linden and Paul Slaats as a part
 of E155 for their Final Project.  The purpose of this code is to implement 
 Tetris on an LED Matrix connected to a Mudd Pi IV, on which this SystemVerilog
 was meant to be used.
-
 This Project was completed on December 4th, 2016
 */
 
