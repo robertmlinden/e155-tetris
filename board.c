@@ -343,7 +343,7 @@ bool move(FallingPiece* fallingPiece, bool moveRight, char board[BOARD_HEIGHT][B
 			int boardRAfterMove = r + fallingPiece->r;
 			int boardCAfterMove = c + fallingPiece->c + h_offset;
 			if((boardRAfterMove > 0 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ') ||
-				(boardCAfterMove <= 0 || boardCAfterMove >= BOARD_WIDTH - 1 && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ')) {
+				((boardCAfterMove <= 0 || boardCAfterMove >= BOARD_WIDTH - 1) && fallingPieceChars[r][c] != ' ' && board[boardRAfterMove][boardCAfterMove] != ' ')) {
 				return -4;
 			}
 		}

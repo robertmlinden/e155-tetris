@@ -533,7 +533,7 @@ void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
 			// corresponding to the next piece
 			else if(isInSquare(lrow, lcol, NEXT_PIECE_LED_ROW_BEGIN + 1, NEXT_PIECE_LED_ROW_END - 1,
 							NEXT_PIECE_LED_COL_BEGIN + 1, NEXT_PIECE_LED_COL_END - 1)) {
-				sendChar = nextPieceChars[lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)][lcol - (NEXT_PIECE_LED_COL_BEGIN + 1)];
+				sendChar = nextPieceChars[(NEXT_PIECE_LED_COL_END - 1) - lcol][lrow - (NEXT_PIECE_LED_ROW_BEGIN + 1)];
 				if(sendChar != ' ') sendChar = 'N';
 				spiSendReceive(charToColor(sendChar));
 				if(PRINT_LED_BOARD_REPRESENTATION) {
@@ -697,7 +697,9 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 	int result;
 
 	while(!(sys_timer[0] & 0b0010)) {
-		result = PIECE_STILL_FALLING;
+		if(!gameOver) {
+			result = PIECE_STILL_FALLING;
+		}
 		if(sys_timer[0] & 0b1000) {
 			char keyByte = spiSendReceive(JUNK_BYTE);
 			if(keyByte >> 7) {
@@ -743,6 +745,7 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 								result = PIECE_STILL_FALLING;
 								while(result == PIECE_STILL_FALLING) {
 									result = tick(fallingPiece, board);
+									printf("FALL\n");
 								}
 								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
 							}
