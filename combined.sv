@@ -36,6 +36,7 @@ module TetrisFinal(input logic 		   clk, reset,						// CLK is the System Clock 
 				 logic fakeBoard [N - 1:0][N - 1:0];						// fakeBoard is a board that we generated to test our LED matrix and debug our code.
 				 logic [11:0] cnt;												// cnt is the logic for a counter to generate a fake board.
 				 logic [11:0] sCount;											// sCount was an output of the SPI_board_slave code used to debug the number of bits sent by the Pi.
+				 logic latched_board [N - 1:0][N - 1:0];
 				
 				// This block of logic is used to fill the fakeBoard to check that the LED Matrix is working
 				
@@ -52,11 +53,10 @@ module TetrisFinal(input logic 		   clk, reset,						// CLK is the System Clock 
 				 synchronizer		synchronizer(clk, reset, keyPressed, keyPressedC);
 				 synchronizer2 	synchronizer2(clk, reset, keyPressed, keyPressedC, keyPressedS);
 				 
-				 led_matrix 		led_matrix(clk, board/*latched_board*/, R0, G0, B0, R1, G1, B1, A, lch, blank, led_idle);
-				 spi_slave			key_spi(sclk, cs, sdi, sdo, keyByte);
-				 spi_board_slave 	spi_board_slave(sclk, cs, sdi, load, board, numNotSpaces, sCount, boardOut, matrow, matcol);
-				 
-				 // pad_and_latch_board_state palbs(sclk, ~load, led_idle, board, latched_board);
+				 led_matrix 					led_matrix(clk, latched_board, R0, G0, B0, R1, G1, B1, A, lch, blank, led_idle);
+				 spi_slave						key_spi(sclk, cs, sdi, sdo, keyByte);
+				 spi_board_slave 				spi_board_slave(sclk, cs, sdi, load, board, numNotSpaces, sCount, boardOut, matrow, matcol);
+				 pad_and_latch_board_state palbs(sclk, ~load, led_idle, board, latched_board);
 				 
 				 assign sendCount = sCount >> (11 - 4);
 				 assign keyByte[7] = (keyPressedS == 4'hD) ? 0 : 1;
@@ -358,13 +358,14 @@ endmodule
 module pad_and_latch_board_state(input logic sclk,
 											input logic board_spi_done,
 											input logic matrix_idle,
-											input logic [7:0] board [N-1:0][N-1:0],
-											output logic [7:0] latched_board [N-1:0][31:0]);
+											input logic board [N - 1:0][N - 1:0],
+											output logic latched_board [N - 1:0][N - 1:0]);
 
 		always_ff @(posedge sclk)
-			if(board_spi_done & matrix_idle) begin
+			if(board_spi_done) begin
 				latched_board <= board;
 			end
 											
 endmodule
+
 
