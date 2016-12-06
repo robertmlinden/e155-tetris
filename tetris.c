@@ -445,7 +445,7 @@ void getDigitChars(char digitChars[NUMBER_HEIGHT][NUMBER_WIDTH], int digit) {
  * just below PRINT_LED_BOARD_REPRESENTATION is true
  */
 
-#define PRINT_LED_BOARD_REPRESENTATION true
+#define PRINT_LED_BOARD_REPRESENTATION false
 #define PRINT_GAME_STATE_SIMULATION true
 
 void sendBoardState(FallingPiece* fallingPiece, FallingPiece* nextPiece,
@@ -656,7 +656,7 @@ void processTick(FallingPiece* fallingPiece,
 		// This is not a piece transition, Nothing to do here
 	}
 	else {
-		printf("Rows Eliminated: %d\n", rowsEliminatedOnTick);
+		// printf("Rows Eliminated: %d\n", rowsEliminatedOnTick);
 		score += scoreIncreaseFromRowsEliminated(rowsEliminatedOnTick);
 
 		if(useBonusPiece) {
@@ -745,7 +745,7 @@ int delayMicrosAndWaitForKeyPress(unsigned int micros, FallingPiece* fallingPiec
 								result = PIECE_STILL_FALLING;
 								while(result == PIECE_STILL_FALLING) {
 									result = tick(fallingPiece, board);
-									printf("FALL\n");
+									// printf("FALL\n");
 								}
 								processTick(fallingPiece, nextPiece, bonusPiece, board, result);
 							}
@@ -830,16 +830,18 @@ void main(void) {
 			// We only care about this result if it's GAME OVER
 	 		int rowsEliminatedOnTick = delaySecondsAndWaitForKeyPress(TICK_LENGTH_SECONDS, &fallingPiece, &nextPiece, &bonusPiece, board);
 
-			printf("Before: %d", rowsEliminatedOnTick);
+			// printf("Before: %d", rowsEliminatedOnTick);
 			// Let gravity tick and check for the number of rows eliminated
 			if(rowsEliminatedOnTick != GAME_OVER) {
 				rowsEliminatedOnTick = tick(&fallingPiece, board);
-				printf("After: %d", rowsEliminatedOnTick);
+				// printf("After: %d", rowsEliminatedOnTick);
 		
 				processTick(&fallingPiece, &nextPiece, &bonusPiece, board, rowsEliminatedOnTick);
 			}
 	     	}
 		sendBoardState(&fallingPiece, &nextPiece, &bonusPiece, board);
+
+		printf("Game Over! Press 'A' to play again!\n\n");
 
 		int playAgain;
 		do {

@@ -272,7 +272,7 @@ bool solidifyFallingPiece(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][B
 			int boardR = r + fallingPiece->r;
 			int boardC = c + fallingPiece->c;
 			if(fallingPieceChars[r][c] != ' ') {
-				printf("(%d, %d)\n", boardR, boardC); 
+				// printf("(%d, %d)\n", boardR, boardC); 
 				if(boardR <= 1) {
 					return false;
 				}
@@ -314,7 +314,7 @@ int checkForSolidification(FallingPiece* fallingPiece, char board[BOARD_HEIGHT][
 				// The piece needs to stop falling here
 				bool continueGame = solidifyFallingPiece(fallingPiece, board);
 				if(!continueGame) {
-					printf("DON'T CONTINUE\n");
+					// printf("DON'T CONTINUE\n");
 					return GAME_OVER;
 				}
 				int scoreAddition = lineCheck(board);				
@@ -474,7 +474,7 @@ void displays(FallingPiece* fallingPiece, FallingPiece* nextPiece, FallingPiece*
 	if(bonusPiece -> pieceShape != NONEXISTENT) {
 		displayPiece(bonusPiece);
 	}
-	printf("********************************************************\n");
+	printf("********************************************************\n\n\n\n");
 }
 
 
