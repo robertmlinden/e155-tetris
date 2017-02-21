@@ -34,7 +34,7 @@ Following the previous steps will light up a single row for a very short amount 
 
 ## HDL Block Diagram
 A block diagram showing the logic that the FPGA synthesizes from the SystemVerilog code
-||Insert Image Here||
+![Block Diagram](/readme_resources/block_diagram.png?raw=true "Block Diagram")
 
 ## Hardware Schematic
 A schematic showing the wiring connections made between the hardware components
