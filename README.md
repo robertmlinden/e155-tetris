@@ -5,7 +5,7 @@ Welcome to Paul Slaats's and Robert Linden's E155 Microprocessors Final Project!
 
 ## Demo
 We'll get right to it. Click the link to view the demo:
-https://www.dropbox.com/home/Tetris%20Demo?preview=tetris_demo.mp4
+https://www.dropbox.com/s/vxxqw4w3mpekhzs/tetris_demo.mp4?dl=0
 
 ## Technical Overview
 Our implementation of LED Tetris is split between a Raspberry Pi 3.0 and a MuddPi FPGA. All communication between the two devices is done via SPI with the Pi acting as the master and the FPGA acting as the slave. The FPGA is responsible for registering keystrokes on a 4x4 matrix keypad, encoding them as a byte, and sending this information to the Pi. The FPGA is also responsible for accepting the state of the LED board and sending digital signals to the LED matrix to make the matrix light up appropriately. All code on the FPGA is written in SystemVerilog.
