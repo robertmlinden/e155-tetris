@@ -5,7 +5,6 @@ Welcome to Paul Slaats's and Robert Linden's E155 Microprocessors Final Project!
 
 ## Demo
 We'll get right to it. Click the link to view the demo:
-
 https://www.dropbox.com/s/vxxqw4w3mpekhzs/tetris_demo.mp4?dl=0
 
 ## Technical Overview
